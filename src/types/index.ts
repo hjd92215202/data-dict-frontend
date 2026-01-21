@@ -10,6 +10,7 @@ export interface WordRoot {
 export interface SuggestResponse {
   suggested_en: string;
   missing_words: string[];
+  matched_ids: number[];
 }
 
 export interface StandardField {
@@ -18,6 +19,7 @@ export interface StandardField {
   field_en_name: string;
   composition_ids: number[];
   data_type: string;
+  associated_terms?: string;
   is_standard: boolean;
   created_at?: string;
 }

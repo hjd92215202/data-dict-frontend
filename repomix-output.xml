@@ -1,0 +1,1192 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.gitignore
+index.html
+package.json
+public/vite.svg
+README.md
+src/api/index.ts
+src/App.vue
+src/assets/vue.svg
+src/components/SmartMapper.vue
+src/main.ts
+src/style.css
+src/types/index.ts
+src/views/StandardFieldList.vue
+src/views/UserSearch.vue
+src/views/WordRootList.vue
+tsconfig.app.json
+tsconfig.json
+tsconfig.node.json
+vite.config.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="src/views/UserSearch.vue">
+<template>
+  <div class="search-page">
+    <div class="search-box">
+      <h1>标准数据元查询</h1>
+      <el-input
+        v-model="searchText"
+        placeholder="输入中文字段名，如：用户手机号"
+        size="large"
+        @keyup.enter="handleSearch"
+      >
+        <template #append>
+          <el-button @click="handleSearch" :icon="Search">查询</el-button>
+        </template>
+      </el-input>
+
+      <!-- 查询结果显示 -->
+      <div v-if="hasSearched" class="result-area">
+        <el-card v-if="resultField" class="result-card">
+          <el-descriptions title="标准定义已找到" :column="1" border>
+            <el-descriptions-item label="中文名称">{{ resultField.field_cn_name }}</el-descriptions-item>
+            <el-descriptions-item label="英文名称">
+              <span class="en-name">{{ resultField.field_en_name }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="推荐类型">{{ resultField.data_type }}</el-descriptions-item>
+          </el-descriptions>
+        </el-card>
+
+        <el-empty v-else description="未找到标准定义">
+          <p>该字段尚未被标准化，请点击下方按钮申请</p>
+          <el-button type="primary" @click="requestNewField">申请新增标准字段</el-button>
+        </el-empty>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue';
+import { Search } from '@element-plus/icons-vue';
+import { dictionaryApi } from '../api';
+import { ElMessageBox, ElMessage } from 'element-plus';
+
+const searchText = ref('');
+const hasSearched = ref(false);
+const resultField = ref<any>(null);
+
+const handleSearch = async () => {
+  if (!searchText.value) return;
+  const { data } = await dictionaryApi.searchField(searchText.value);
+  resultField.value = data;
+  hasSearched.value = true;
+};
+
+const requestNewField = () => {
+  ElMessageBox.confirm(
+    `确认申请新增字段 [${searchText.value}] 的标准化定义吗？`,
+    '提交申请',
+    { confirmButtonText: '确定', cancelButtonText: '取消' }
+  ).then(async () => {
+    // 调用之前定义的 create_task 接口
+    await dictionaryApi.createTask({ type: 'FIELD_ADD', content: searchText.value });
+    ElMessage.success('申请已提交，管理员将尽快处理');
+  });
+};
+</script>
+
+<style scoped>
+.search-page { display: flex; justify-content: center; padding-top: 100px; }
+.search-box { width: 600px; text-align: center; }
+.result-area { margin-top: 40px; text-align: left; }
+.en-name { font-family: monospace; font-weight: bold; color: #409eff; font-size: 1.2em; }
+</style>
+</file>
+
+<file path=".gitignore">
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+</file>
+
+<file path="index.html">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>data-dict-frontend</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+</file>
+
+<file path="package.json">
+{
+  "name": "data-dict-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "axios": "^1.13.2",
+    "element-plus": "^2.13.1",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.24"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@vitejs/plugin-vue": "^6.0.3",
+    "@vue/tsconfig": "^0.8.1",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4",
+    "vue-tsc": "^3.1.4"
+  }
+}
+</file>
+
+<file path="public/vite.svg">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="31.88" height="32" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 257"><defs><linearGradient id="IconifyId1813088fe1fbc01fb466" x1="-.828%" x2="57.636%" y1="7.652%" y2="78.411%"><stop offset="0%" stop-color="#41D1FF"></stop><stop offset="100%" stop-color="#BD34FE"></stop></linearGradient><linearGradient id="IconifyId1813088fe1fbc01fb467" x1="43.376%" x2="50.316%" y1="2.242%" y2="89.03%"><stop offset="0%" stop-color="#FFEA83"></stop><stop offset="8.333%" stop-color="#FFDD35"></stop><stop offset="100%" stop-color="#FFA800"></stop></linearGradient></defs><path fill="url(#IconifyId1813088fe1fbc01fb466)" d="M255.153 37.938L134.897 252.976c-2.483 4.44-8.862 4.466-11.382.048L.875 37.958c-2.746-4.814 1.371-10.646 6.827-9.67l120.385 21.517a6.537 6.537 0 0 0 2.322-.004l117.867-21.483c5.438-.991 9.574 4.796 6.877 9.62Z"></path><path fill="url(#IconifyId1813088fe1fbc01fb467)" d="M185.432.063L96.44 17.501a3.268 3.268 0 0 0-2.634 3.014l-5.474 92.456a3.268 3.268 0 0 0 3.997 3.378l24.777-5.718c2.318-.535 4.413 1.507 3.936 3.838l-7.361 36.047c-.495 2.426 1.782 4.5 4.151 3.78l15.304-4.649c2.372-.72 4.652 1.36 4.15 3.788l-11.698 56.621c-.732 3.542 3.979 5.473 5.943 2.437l1.313-2.028l72.516-144.72c1.215-2.423-.88-5.186-3.54-4.672l-25.505 4.922c-2.396.462-4.435-1.77-3.759-4.114l16.646-57.705c.677-2.35-1.37-4.583-3.769-4.113Z"></path></svg>
+</file>
+
+<file path="README.md">
+企业级元数据管理的标准流程：“用户消费数据、管理员生产标准”
+
+系统划分为两个核心视图：【用户查询端】 和 【管理员管理端】
+
+业务逻辑流程图
+用户视角 (查询逻辑)：
+输入中文名 -> 后端查询 standard_fields (标准字段库)。
+命中：展示对应的英文名、数据类型。
+未命中：红色警告“未找到标准定义”，提供一个【申请新增】按钮。
+点击申请：向 notification_tasks 写入一条任务。
+管理员视角 (生产逻辑)：
+进入“智能命名” -> 输入中文 -> 系统调用 jieba 分词。
+全匹配：所有分词都有词根 -> 自动组合英文名 -> 允许点击【正式入库】。
+部分缺失：存在无词根的词段 -> 禁止入库 -> 引导管理员先去【新增词根】。
+</file>
+
+<file path="src/api/index.ts">
+import axios from 'axios';
+import type { WordRoot, SuggestResponse } from '../types';
+
+const request = axios.create({
+  baseURL: '/api',
+  timeout: 5000
+});
+
+export const dictionaryApi = {
+  // 词根相关
+  getRoots: () => request.get<WordRoot[]>('/roots'),
+  createRoot: (data: WordRoot) => request.post<WordRoot>('/roots', data),
+updateRoot: (id: number, data: WordRoot) => request.put(`/roots/${id}`, data),
+  deleteRoot: (id: number) => request.delete(`/roots/${id}`),
+  
+  // 智能建议
+  getSuggest: (q: string) => request.get<SuggestResponse>(`/suggest?q=${encodeURIComponent(q)}`),
+  
+  // 字段相关
+  createField: (data: any) => request.post('/fields', data),
+  getFields: () => request.get('/fields'),
+  updateField: (id: number, data: any) => request.put(`/fields/${id}`, data),
+  deleteField: (id: number) => request.delete(`/fields/${id}`),
+
+  getFieldDetails: (id: number) => request.get<WordRoot[]>(`/fields/${id}`),
+};
+</file>
+
+<file path="src/App.vue">
+<template>
+  <el-container class="layout-container">
+    <el-aside width="220px">
+      <el-menu 
+        :default-active="activeMenu" 
+        class="el-menu-vertical"
+        @select="handleSelect"
+      >
+        <div class="logo">数据字典标准系统</div>
+        <el-menu-item index="mapper">
+          <el-icon><Monitor /></el-icon>
+          <span>智能字段命名</span>
+        </el-menu-item>
+        <el-menu-item index="fields">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>标准字段库</span>
+        </el-menu-item>
+        <el-menu-item index="roots">
+          <el-icon><Collection /></el-icon>
+          <span>词根库管理</span>
+        </el-menu-item>
+      </el-menu>
+    </el-aside>
+    
+    <el-main>
+      <SmartMapper v-if="activeMenu === 'mapper'" />
+      <WordRootList v-else-if="activeMenu === 'roots'" />
+      <StandardFieldList v-else-if="activeMenu === 'fields'" />
+    </el-main>
+  </el-container>
+</template>
+
+<script setup lang="ts">
+import { ref } from 'vue';
+import { Monitor, Collection,DataAnalysis  } from '@element-plus/icons-vue';
+import SmartMapper from './components/SmartMapper.vue';
+import WordRootList from './views/WordRootList.vue';
+import StandardFieldList from './views/StandardFieldList.vue';
+
+const activeMenu = ref('mapper');
+
+const handleSelect = (index: string) => {
+  activeMenu.value = index;
+};
+</script>
+
+<style>
+body { margin: 0; }
+.logo {
+  height: 60px;
+  line-height: 60px;
+  text-align: center;
+  font-weight: bold;
+  color: #409eff;
+  border-bottom: 1px solid #eee;
+}
+.layout-container { height: 100vh; }
+.el-menu-vertical { height: 100%; border-right: none; background: #f8f9fa; }
+</style>
+</file>
+
+<file path="src/assets/vue.svg">
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="37.07" height="36" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 198"><path fill="#41B883" d="M204.8 0H256L128 220.8L0 0h97.92L128 51.2L157.44 0h47.36Z"></path><path fill="#41B883" d="m0 0l128 220.8L256 0h-51.2L128 132.48L50.56 0H0Z"></path><path fill="#35495E" d="M50.56 0L128 133.12L204.8 0h-47.36L128 51.2L97.92 0H50.56Z"></path></svg>
+</file>
+
+<file path="src/components/SmartMapper.vue">
+<template>
+  <div class="mapper-container">
+    <el-card class="main-card">
+      <template #header>
+        <div class="card-header">
+          <div class="header-left">
+            <el-icon class="icon-magic"><MagicStick /></el-icon>
+            <span class="title">标准字段生产台 (管理员)</span>
+          </div>
+          <el-tag type="warning" effect="light">生产环境逻辑：无词根不入库</el-tag>
+        </div>
+      </template>
+
+      <el-form label-position="top">
+        <!-- 1. 输入待录入的中文名称 -->
+        <el-form-item>
+          <template #label>
+            <div class="label-with-tip">
+              <span>输入字段中文名称</span>
+              <small>系统将基于词根库进行智能切词并匹配缩写</small>
+            </div>
+          </template>
+          <el-input
+            v-model="cnInput"
+            placeholder="例如：收货人电话"
+            size="large"
+            @input="handleInput"
+            clearable
+          />
+        </el-form-item>
+
+        <!-- 2. 分词与匹配结果预览 -->
+        <div v-if="cnInput" class="mapping-result-box">
+          <div class="section-title">分词匹配预览：</div>
+          <div class="suggestion-row">
+            <el-input
+              v-model="suggestedEn"
+              readonly
+              class="en-display-input"
+              size="large"
+            >
+              <template #prefix>EN:</template>
+            </el-input>
+            
+            <!-- 入库按钮：只有当没有任何缺失词根时才启用 -->
+            <el-button 
+              type="primary" 
+              size="large"
+              :disabled="hasMissingRoots || !suggestedEn" 
+              @click="openAdoptDialog"
+            >
+              正式入库
+            </el-button>
+          </div>
+
+          <!-- 3. 状态预警：缺失词根提醒 -->
+          <div v-if="hasMissingRoots" class="error-alert">
+            <el-alert 
+              title="无法入库：检测到未标准化的词段" 
+              type="error" 
+              :closable="false" 
+              show-icon
+            >
+              <template #default>
+                <div class="missing-content">
+                  <p>以下词语尚未录入“标准词根库”，请先补全词根后再生成标准字段：</p>
+                  <div class="missing-tags">
+                    <el-tag 
+                      v-for="word in missingWords" 
+                      :key="word" 
+                      type="danger" 
+                      effect="dark"
+                      class="word-tag"
+                    >
+                      {{ word }}
+                    </el-tag>
+                  </div>
+                  <div class="action-hint">
+                    <el-button type="danger" link @click="goToRootManagement">
+                      👉 前往词根管理补全
+                    </el-button>
+                  </div>
+                </div>
+              </template>
+            </el-alert>
+          </div>
+
+          <div v-else-if="suggestedEn" class="success-alert">
+            <el-alert 
+              title="符合标准：所有词段均已找到对应词根" 
+              type="success" 
+              :closable="false" 
+              show-icon
+            />
+          </div>
+        </div>
+      </el-form>
+    </el-card>
+
+    <!-- 弹窗：正式入库 -->
+    <el-dialog v-model="dialogVisible" title="确认入库：标准字段定义" width="500px">
+      <el-form :model="adoptForm" label-width="120px">
+        <el-form-item label="标准中文名">
+          <el-input v-model="adoptForm.field_cn_name" readonly />
+        </el-form-item>
+        <el-form-item label="标准英文名">
+          <el-input v-model="adoptForm.field_en_name" readonly />
+        </el-form-item>
+        <el-form-item label="数据类型">
+          <el-select v-model="adoptForm.data_type" style="width: 100%">
+            <el-option label="VARCHAR(100)" value="VARCHAR(100)" />
+            <el-option label="INT" value="INT" />
+            <el-option label="BIGINT" value="BIGINT" />
+            <el-option label="DECIMAL(18,2)" value="DECIMAL(18,2)" />
+            <el-option label="TIMESTAMP" value="TIMESTAMP" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联词根链">
+          <el-tag 
+            v-for="id in matchedIds" 
+            :key="id" 
+            size="small" 
+            style="margin-right: 5px"
+          >
+            RootID: {{ id }}
+          </el-tag>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleFinalSubmit" :loading="submitting">
+          确认入库
+        </el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed } from 'vue';
+import { MagicStick } from '@element-plus/icons-vue';
+import { dictionaryApi } from '../api';
+import { ElMessage } from 'element-plus';
+
+// --- 数据定义 ---
+const cnInput = ref('');
+const suggestedEn = ref('');
+const missingWords = ref<string[]>([]);
+const matchedIds = ref<number[]>([]);
+
+const dialogVisible = ref(false);
+const submitting = ref(false);
+
+const adoptForm = ref({
+  field_cn_name: '',
+  field_en_name: '',
+  data_type: 'VARCHAR(100)',
+  composition_ids: [] as number[]
+});
+
+// --- 计算属性 ---
+const hasMissingRoots = computed(() => missingWords.value.length > 0);
+
+// --- 逻辑处理 ---
+let timer: any = null;
+const handleInput = () => {
+  if (timer) clearTimeout(timer);
+  timer = setTimeout(async () => {
+    if (!cnInput.value.trim()) {
+      suggestedEn.value = '';
+      missingWords.value = [];
+      matchedIds.value = [];
+      return;
+    }
+
+    try {
+      // 请求后端：分词并匹配词根
+      const { data } = await dictionaryApi.getSuggest(cnInput.value);
+      suggestedEn.value = data.suggested_en;
+      missingWords.value = data.missing_words;
+      matchedIds.value = data.matched_ids;
+    } catch (e) {
+      console.error("智能建议请求失败");
+    }
+  }, 350);
+};
+
+// 打开入库确认窗
+const openAdoptDialog = () => {
+  adoptForm.value = {
+    field_cn_name: cnInput.value,
+    field_en_name: suggestedEn.value,
+    data_type: 'VARCHAR(100)',
+    composition_ids: matchedIds.value
+  };
+  dialogVisible.value = true;
+};
+
+// 正式提交入库
+const handleFinalSubmit = async () => {
+  submitting.value = true;
+  try {
+    await dictionaryApi.createField(adoptForm.value);
+    ElMessage.success('标准字段已成功录入标准库！');
+    dialogVisible.value = false;
+    // 重置界面
+    cnInput.value = '';
+    suggestedEn.value = '';
+    missingWords.value = [];
+    matchedIds.value = [];
+  } catch (error: any) {
+    ElMessage.error('入库失败');
+  } finally {
+    submitting.value = false;
+  }
+};
+
+const goToRootManagement = () => {
+  ElMessage.info('请在侧边栏切换至 [词根库管理] 页面进行新增');
+  // 如果使用了 vue-router，这里可以 router.push('/roots')
+};
+</script>
+
+<style scoped>
+.mapper-container {
+  max-width: 800px;
+  margin: 30px auto;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-magic {
+  color: #409eff;
+  font-size: 20px;
+}
+
+.title {
+  font-weight: bold;
+  font-size: 16px;
+}
+
+.label-with-tip {
+  display: flex;
+  flex-direction: column;
+}
+
+.label-with-tip small {
+  color: #999;
+  font-weight: normal;
+}
+
+.mapping-result-box {
+  margin-top: 20px;
+  padding: 20px;
+  background-color: #fafafa;
+  border-radius: 8px;
+  border: 1px solid #eee;
+}
+
+.section-title {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 12px;
+}
+
+.suggestion-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.en-display-input :deep(.el-input__wrapper) {
+  background-color: #f0f7ff;
+  font-family: 'Consolas', monospace;
+  font-weight: bold;
+}
+
+.error-alert {
+  border: 1px solid #f8d7da;
+}
+
+.missing-content p {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+}
+
+.missing-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.word-tag {
+  font-weight: bold;
+}
+
+.action-hint {
+  margin-top: 15px;
+  border-top: 1px dashed #fab6b6;
+  padding-top: 10px;
+}
+
+.success-alert {
+  border: 1px solid #c3e6cb;
+}
+</style>
+</file>
+
+<file path="src/main.ts">
+import { createApp } from 'vue'
+import { createPinia } from 'pinia'
+import ElementPlus from 'element-plus'
+import 'element-plus/dist/index.css'
+import App from './App.vue'
+
+const app = createApp(App)
+app.use(createPinia())
+app.use(ElementPlus)
+app.mount('#app')
+</file>
+
+<file path="src/style.css">
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+.card {
+  padding: 2em;
+}
+
+#app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}
+</file>
+
+<file path="src/types/index.ts">
+export interface WordRoot {
+  id?: number;
+  cn_name: string;
+  en_abbr: string;
+  associated_terms?: string;
+  remark?: string;
+  created_at?: string;
+}
+
+export interface SuggestResponse {
+  suggested_en: string;
+  missing_words: string[];
+}
+
+export interface StandardField {
+  id?: number;
+  field_cn_name: string;
+  field_en_name: string;
+  composition_ids: number[];
+  data_type: string;
+  is_standard: boolean;
+  created_at?: string;
+}
+</file>
+
+<file path="src/views/StandardFieldList.vue">
+<template>
+    <div class="field-container">
+        <div class="toolbar">
+            <el-input v-model="searchQuery" placeholder="搜索标准字段名..." style="width: 300px" clearable />
+            <el-tag type="info">标准字段总数: {{ filteredFields.length }}</el-tag>
+        </div>
+
+        <el-table :data="filteredFields" border v-loading="loading">
+            <el-table-column prop="id" label="ID" width="70" />
+            <el-table-column prop="field_cn_name" label="中文全称" width="200" />
+            <el-table-column prop="field_en_name" label="英文标准名" width="220">
+                <template #default="{ row }">
+                    <b style="color: #409eff; font-family: monospace">{{ row.field_en_name }}</b>
+                </template>
+            </el-table-column>
+            <el-table-column prop="data_type" label="数据类型" width="120" />
+            <el-table-column label="状态" width="100">
+                <template #default="{ row }">
+                    <el-tag :type="row.is_standard ? 'success' : 'warning'">
+                        {{ row.is_standard ? '已审核' : '待确认' }}
+                    </el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column label="操作">
+                <template #default="{ row }">
+                    <el-button link type="primary" @click="handleEditField(row)">编辑</el-button>
+                    <el-button link @click="showDetail(row)">组成</el-button>
+                    <el-popconfirm title="确定从标准库移除吗？" @confirm="handleDeleteField(row.id)">
+                        <template #reference>
+                            <el-button link type="danger">删除</el-button>
+                        </template>
+                    </el-popconfirm>
+                </template>
+            </el-table-column>
+        </el-table>
+
+        <!-- 编辑弹窗 -->
+        <el-dialog v-model="editVisible" title="编辑标准字段" width="450px">
+            <el-form :model="editForm" label-width="100px">
+                <el-form-item label="中文名称">
+                    <el-input v-model="editForm.field_cn_name" />
+                </el-form-item>
+                <el-form-item label="数据类型">
+                    <el-select v-model="editForm.data_type" style="width: 100%">
+                        <el-option label="VARCHAR(50)" value="VARCHAR(50)" />
+                        <el-option label="INT" value="INT" />
+                        <el-option label="TIMESTAMP" value="TIMESTAMP" />
+                    </el-select>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="editVisible = false">取消</el-button>
+                <el-button type="primary" @click="confirmUpdateField">保存</el-button>
+            </template>
+        </el-dialog>
+
+        <!-- 详情抽屉：查看词根组成 -->
+        <el-drawer v-model="drawerVisible" title="字段组成详情" size="400px">
+            <div v-if="selectedField">
+                <h3>{{ selectedField.field_cn_name }}</h3>
+                <p>英文名: <code>{{ selectedField.field_en_name }}</code></p>
+                <el-divider />
+                <p><b>组成词根解析：</b></p>
+                <el-timeline v-if="detailRoots.length > 0">
+                    <el-timeline-item v-for="root in detailRoots" :key="root.id" :timestamp="root.en_abbr"
+                        placement="top">
+                        <el-card shadow="never">
+                            <h4>{{ root.cn_name }}</h4>
+                            <p v-if="root.remark" style="font-size: 12px; color: #999">{{ root.remark }}</p>
+                        </el-card>
+                    </el-timeline-item>
+                </el-timeline>
+            </div>
+        </el-drawer>
+    </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue';
+import { dictionaryApi } from '../api';
+import type { StandardField, WordRoot } from '../types';
+import { ElMessage } from 'element-plus';
+
+const loading = ref(false);
+const fields = ref<StandardField[]>([]);
+const searchQuery = ref('');
+
+// 详情相关
+const drawerVisible = ref(false);
+const selectedField = ref<StandardField | null>(null);
+const detailRoots = ref<WordRoot[]>([]);
+
+const editVisible = ref(false);
+const editForm = ref<any>({});
+
+const handleEditField = (row: StandardField) => {
+  editForm.value = { ...row };
+  editVisible.value = true;
+};
+
+const confirmUpdateField = async () => {
+  await dictionaryApi.updateField(editForm.value.id, editForm.value);
+  ElMessage.success('更新成功');
+  editVisible.value = false;
+  fetchFields();
+};
+
+const handleDeleteField = async (id: number) => {
+  await dictionaryApi.deleteField(id);
+  ElMessage.success('已移除');
+  fetchFields();
+};
+
+const fetchFields = async () => {
+    loading.value = true;
+    try {
+        const { data } = await dictionaryApi.getFields();
+        fields.value = data;
+    } finally {
+        loading.value = false;
+    }
+};
+
+const filteredFields = computed(() => {
+    const q = searchQuery.value.toLowerCase();
+    return fields.value.filter(f =>
+        f.field_cn_name.toLowerCase().includes(q) ||
+        f.field_en_name.toLowerCase().includes(q)
+    );
+});
+
+const showDetail = async (row: StandardField) => {
+    selectedField.value = row;
+    drawerVisible.value = true;
+    // 调用后端 get_field_details 接口
+    try {
+        const { data } = await dictionaryApi.getFieldDetails(row.id!);
+        detailRoots.value = data;
+    } catch (e) {
+        console.error("加载详情失败");
+    }
+};
+
+onMounted(fetchFields);
+</script>
+
+<style scoped>
+.field-container {
+    padding: 10px;
+}
+
+.toolbar {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 20px;
+    align-items: center;
+}
+</style>
+</file>
+
+<file path="src/views/WordRootList.vue">
+<template>
+  <div class="root-container">
+    <!-- 操作栏 -->
+    <div class="toolbar">
+      <el-input v-model="searchQuery" placeholder="搜索中文名或英文缩写" style="width: 300px" clearable @input="handleSearch" />
+      <el-button type="primary" :icon="Plus" @click="openAddDialog">
+        新增词根
+      </el-button>
+    </div>
+
+    <!-- 数据表格 -->
+    <el-table :data="filteredRoots" border v-loading="loading" style="width: 100%">
+      <el-table-column prop="id" label="ID" width="80" />
+      <el-table-column prop="cn_name" label="中文名称" width="150" />
+      <el-table-column prop="en_abbr" label="英文缩写" width="150">
+        <template #default="{ row }">
+          <code class="en-code">{{ row.en_abbr }}</code>
+        </template>
+      </el-table-column>
+      <el-table-column prop="associated_terms" label="同义词" show-overflow-tooltip />
+      <el-table-column prop="remark" label="备注" />
+      <el-table-column prop="created_at" label="创建时间" width="180">
+        <template #default="{ row }">
+          {{ row.created_at ? new Date(row.created_at).toLocaleString() : '-' }}
+        </template>
+      </el-table-column>
+
+      <el-table-column label="操作" width="150">
+        <template #default="{ row }">
+          <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
+          <el-popconfirm title="确定删除吗？" @confirm="handleDelete(row.id)">
+            <template #reference>
+              <el-button link type="danger">删除</el-button>
+            </template>
+          </el-popconfirm>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <!-- 新增/编辑弹窗 -->
+    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑词根' : '新增词根'" width="500px">
+      <el-form :model="form" label-width="100px" ref="formRef" :rules="rules">
+        <el-form-item label="中文名称" prop="cn_name">
+          <el-input v-model="form.cn_name" placeholder="如：金额" />
+        </el-form-item>
+        <el-form-item label="英文缩写" prop="en_abbr">
+          <el-input v-model="form.en_abbr" placeholder="如：amt" />
+        </el-form-item>
+        <el-form-item label="同义词" prop="associated_terms">
+          <el-input v-model="form.associated_terms" placeholder="多个用逗号隔开，如：钱,费用,价格" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="form.remark" type="textarea" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveRoot" :loading="submitting">确定</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, computed } from 'vue';
+import { Plus } from '@element-plus/icons-vue';
+import { dictionaryApi } from '../api';
+import type { WordRoot } from '../types';
+import { ElMessage } from 'element-plus';
+
+const loading = ref(false);
+const submitting = ref(false);
+const roots = ref<WordRoot[]>([]);
+const searchQuery = ref('');
+const dialogVisible = ref(false);
+const formRef = ref();
+
+const form = ref<WordRoot>({
+  cn_name: '',
+  en_abbr: '',
+  associated_terms: '',
+  remark: ''
+});
+
+const rules = {
+  cn_name: [{ required: true, message: '请输入中文名称', trigger: 'blur' }],
+  en_abbr: [{ required: true, message: '请输入英文缩写', trigger: 'blur' }],
+};
+
+// 获取数据
+const fetchRoots = async () => {
+  loading.value = true; // 修正：这里之前是 loading.ref，应改为 .value
+  try {
+    const { data } = await dictionaryApi.getRoots();
+    roots.value = data;
+  } catch (error) {
+    ElMessage.error('获取列表失败');
+  } finally {
+    loading.value = false;
+  }
+};
+
+// 搜索回调（如果 template 中有 @input="handleSearch"）
+const handleSearch = () => {
+  // filteredRoots 是计算属性，会自动随 searchQuery 变化
+  // 这里可以留空，或者放一些特殊的搜索埋点逻辑
+  console.log('Searching for:', searchQuery.value);
+};
+
+// 过滤逻辑
+const filteredRoots = computed(() => {
+  const q = searchQuery.value.toLowerCase().trim();
+  if (!q) return roots.value;
+  return roots.value.filter(r =>
+    r.cn_name.toLowerCase().includes(q) ||
+    r.en_abbr.toLowerCase().includes(q) ||
+    (r.associated_terms && r.associated_terms.toLowerCase().includes(q))
+  );
+});
+
+const openAddDialog = () => {
+  form.value = { cn_name: '', en_abbr: '', associated_terms: '', remark: '' };
+  dialogVisible.value = true;
+};
+
+const handleEdit = (row: WordRoot) => {
+  form.value = { ...row }; // 拷贝数据
+  dialogVisible.value = true;
+};
+
+const handleDelete = async (id: number) => {
+  try {
+    await dictionaryApi.deleteRoot(id);
+    ElMessage.success('已删除');
+    fetchRoots();
+  } catch (e) { ElMessage.error('删除失败'); }
+};
+
+const saveRoot = async () => {
+  if (!formRef.value) return;
+
+  await formRef.value.validate(async (valid: boolean) => {
+    if (valid) {
+      submitting.value = true;
+      try {
+        await dictionaryApi.createRoot(form.value);
+        ElMessage.success('保存成功');
+        dialogVisible.value = false;
+        fetchRoots(); // 刷新列表
+      } catch (error: any) {
+        ElMessage.error('保存失败');
+      } finally {
+        submitting.value = false;
+      }
+    }
+  });
+};
+
+onMounted(fetchRoots);
+</script>
+
+<style scoped>
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.en-code {
+  background: #f4f4f5;
+  color: #409eff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.root-container {
+  padding: 10px;
+}
+</style>
+</file>
+
+<file path="tsconfig.app.json">
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "types": ["vite/client"],
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
+}
+</file>
+
+<file path="tsconfig.json">
+{
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
+  ]
+}
+</file>
+
+<file path="tsconfig.node.json">
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "types": ["node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Linting */
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+    
+    "allowSyntheticDefaultImports": true,
+    "composite": true,
+  },
+  "include": ["vite.config.ts"]
+}
+</file>
+
+<file path="vite.config.ts">
+import { defineConfig } from 'vite'
+import vue from '@vitejs/plugin-vue'
+
+export default defineConfig({
+  plugins: [vue()],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+      }
+    }
+  }
+})
+</file>
+
+</files>

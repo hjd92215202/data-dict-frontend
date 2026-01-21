@@ -146,7 +146,7 @@ const saveRoot = async () => {
         await dictionaryApi.createRoot(form.value);
         ElMessage.success('保存成功');
         dialogVisible.value = false;
-        fetchRoots(); // 刷新列表
+        await fetchRoots(); // 刷新列表
       } catch (error: any) {
         ElMessage.error('保存失败');
       } finally {

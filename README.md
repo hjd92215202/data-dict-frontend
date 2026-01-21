@@ -1,5 +1,14 @@
-# Vue 3 + TypeScript + Vite
+企业级元数据管理的标准流程：“用户消费数据、管理员生产标准”
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+系统划分为两个核心视图：【用户查询端】 和 【管理员管理端】
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+业务逻辑流程图
+用户视角 (查询逻辑)：
+输入中文名 -> 后端查询 standard_fields (标准字段库)。
+命中：展示对应的英文名、数据类型。
+未命中：红色警告“未找到标准定义”，提供一个【申请新增】按钮。
+点击申请：向 notification_tasks 写入一条任务。
+管理员视角 (生产逻辑)：
+进入“智能命名” -> 输入中文 -> 系统调用 jieba 分词。
+全匹配：所有分词都有词根 -> 自动组合英文名 -> 允许点击【正式入库】。
+部分缺失：存在无词根的词段 -> 禁止入库 -> 引导管理员先去【新增词根】。

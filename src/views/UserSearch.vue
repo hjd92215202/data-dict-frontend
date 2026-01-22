@@ -1,4 +1,7 @@
 <template>
+  <div class="user-nav">
+  <el-button link @click="$router.push('/admin')">进入后台管理</el-button>
+</div>
   <div class="user-search-container">
     <div class="search-header">
       <h1>数据标准字典查询</h1>
@@ -82,4 +85,5 @@ const requestNew = () => {
 .en-name { font-family: 'Consolas', monospace; color: #409eff; font-weight: bold; }
 .meta { text-align: right; }
 .time { font-size: 12px; color: #999; margin-top: 8px; }
+.user-nav { position: absolute; top: 20px; right: 20px; }
 </style>

@@ -1,7 +1,18 @@
+export interface AuthPayload {
+  username: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  role: string;
+}
+
 export interface WordRoot {
   id?: number;
   cn_name: string;
   en_abbr: string;
+  en_full_name?: string;
   associated_terms?: string;
   remark?: string;
   created_at?: string;

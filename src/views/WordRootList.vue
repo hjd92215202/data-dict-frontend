@@ -143,12 +143,23 @@ const saveRoot = async () => {
     if (valid) {
       submitting.value = true;
       try {
-        await dictionaryApi.createRoot(form.value);
-        ElMessage.success('保存成功');
+        // 【核心修复点】判断是否有 id
+        if (form.value.id) {
+          // 调用修改接口：PUT /api/admin/roots/:id
+          await dictionaryApi.updateRoot(form.value.id, form.value);
+          ElMessage.success('修改成功');
+        } else {
+          // 调用新增接口：POST /api/admin/roots
+          await dictionaryApi.createRoot(form.value);
+          ElMessage.success('新增成功');
+        }
+        
         dialogVisible.value = false;
         await fetchRoots(); // 刷新列表
       } catch (error: any) {
-        ElMessage.error('保存失败');
+        // 如果后端返回错误，这里会捕获并提示
+        // 报错“重复键”通常就是因为这里误走了 createRoot 逻辑
+        console.error(error);
       } finally {
         submitting.value = false;
       }

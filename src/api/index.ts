@@ -1,35 +1,57 @@
 import axios from 'axios';
-import type { WordRoot, SuggestResponse ,StandardField } from '../types';
+import router from '../router';
+import type { WordRoot, SuggestResponse, StandardField, AuthPayload, AuthResponse } from '../types';
 
 const request = axios.create({
-  baseURL: '/api',
+  baseURL: '/api', // Vite 代理会将 /api 转发到 http://127.0.0.1:3000
   timeout: 5000
 });
 
+// 请求拦截器：每秒检查一次本地存储，如果有 Token 则注入 Header
+request.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token && config.headers) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// 响应拦截器：统一处理 401/403 错误
+request.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err.response?.status === 401) {
+      localStorage.clear();
+      router.push('/login');
+    }
+    return Promise.reject(err);
+  }
+);
+
 export const dictionaryApi = {
-  // --- 词根相关 ---
-  getRoots: () => request.get<WordRoot[]>('/roots'),
-  createRoot: (data: WordRoot) => request.post<WordRoot>('/roots', data),
-  updateRoot: (id: number, data: WordRoot) => request.put(`/roots/${id}`, data),
-  deleteRoot: (id: number) => request.delete(`/roots/${id}`),
-  
-  // --- 智能建议 (分词匹配) ---
-  getSuggest: (q: string) => request.get<SuggestResponse>(`/suggest?q=${encodeURIComponent(q)}`),
-  
-  // --- 标准字段相关 ---
-  getFields: () => request.get<StandardField[]>('/fields'),
-  createField: (data: any) => request.post('/fields', data),
-  updateField: (id: number, data: any) => request.put(`/fields/${id}`, data),
-  deleteField: (id: number) => request.delete(`/fields/${id}`),
-  getFieldDetails: (id: number) => request.get<WordRoot[]>(`/fields/${id}`),
+  // --- 身份认证 (对应后端 .nest("/api/auth", ...)) ---
+  login: (data: AuthPayload) => request.post<AuthResponse>('/auth/login', data),
+  signup: (data: AuthPayload) => request.post('/auth/signup', data),
 
-  // 1. 新增：用户端搜索接口 (对应后端 search_field)
+  // --- 公共查询 (对应后端 .nest("/api/public", ...)) ---
   searchField: (q: string) => 
-    request.get<StandardField[]>(`/fields/search?q=${encodeURIComponent(q)}`),
+    request.get<StandardField[]>(`/public/search?q=${encodeURIComponent(q)}`),
 
-  // 2. 新增：创建申请任务 (对应后端小红点逻辑，如果后端尚未实现可先定义)
-  createTask: (data: { type: string, content: string }) => 
-    request.post('/tasks', data),
+  // --- 管理端接口 (对应后端 .nest("/api/admin", ...)) ---
+  // 词根管理
+  getRoots: () => request.get<WordRoot[]>('/admin/roots'),
+  createRoot: (data: WordRoot) => request.post('/admin/roots', data),
+  updateRoot: (id: number, data: WordRoot) => request.put(`/admin/roots/${id}`, data),
+  deleteRoot: (id: number) => request.delete(`/admin/roots/${id}`),
+
+  // 智能建议
+  getSuggest: (q: string) => 
+    request.get<SuggestResponse>(`/admin/suggest?q=${encodeURIComponent(q)}`),
+
+  // 标准字段管理
+  getFields: () => request.get<StandardField[]>('/admin/fields'),
+  createField: (data: any) => request.post('/admin/fields', data),
+  updateField: (id: number, data: any) => request.put(`/admin/fields/${id}`, data),
+  deleteField: (id: number) => request.delete(`/admin/fields/${id}`),
+  getFieldDetails: (id: number) => request.get<WordRoot[]>(`/admin/fields/${id}`),
 };
-
-

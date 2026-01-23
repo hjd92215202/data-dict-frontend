@@ -70,4 +70,7 @@ export const dictionaryApi = {
 
     // 管理员创建用户
   adminCreateUser: (data: any) => request.post('/admin/users', data),
+
+  getSimilarRoots: (q: string) => 
+  request.get<any[]>(`/public/similar-roots?q=${encodeURIComponent(q)}`),
 };

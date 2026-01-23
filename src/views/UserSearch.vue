@@ -36,6 +36,19 @@
           </el-card>
         </template>
 
+        <div v-if="results.length === 0 && similarRoots.length > 0" class="recommend-box">
+        <el-alert title="未找到精准标准字段，为您推荐相关标准词根：" type="info" show-icon :closable="false" />
+        <div class="similar-list">
+          <el-card v-for="root in similarRoots" :key="root.id" class="root-mini-card" shadow="hover">
+            <div class="flex-between">
+              <span class="root-cn">{{ root.cn_name }}</span>
+              <el-tag size="small">语义匹配度 {{ (root.score * 100).toFixed(1) }}%</el-tag>
+            </div>
+            <code class="root-en">{{ root.en_abbr }}</code>
+          </el-card>
+        </div>
+      </div>
+
         <el-empty v-else-if="hasSearched" description="未找到标准定义">
           <p class="empty-tip">请联系管理员在后台新增此标准字段</p>
           <el-button type="primary" plain @click="requestNew">提交新增申请</el-button>
@@ -56,12 +69,26 @@ const loading = ref(false);
 const results = ref<any[]>([]);
 const hasSearched = ref(false);
 
+const similarRoots = ref<any[]>([]);
+
 const doSearch = async () => {
   if (!queryText.value) return;
   loading.value = true;
+  results.value = [];
+  similarRoots.value = [];
+  
   try {
-    const { data } = await dictionaryApi.searchField(queryText.value);
-    results.value = data;
+    // A. 先查标准字段 (Postgres ILIKE)
+    const { data: fieldData } = await dictionaryApi.searchField(queryText.value);
+    results.value = fieldData;
+
+    // B. 如果字段查不到，立即启动语义搜索词根 (Qdrant)
+    if (fieldData.length === 0) {
+      // 假设我们使用之前写的 search-similar-roots 接口
+      const { data: simData } = await dictionaryApi.getSimilarRoots(queryText.value);
+      similarRoots.value = simData;
+    }
+    
     hasSearched.value = true;
   } finally {
     loading.value = false;

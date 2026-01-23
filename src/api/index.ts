@@ -54,4 +54,12 @@ export const dictionaryApi = {
   updateField: (id: number, data: any) => request.put(`/admin/fields/${id}`, data),
   deleteField: (id: number) => request.delete(`/admin/fields/${id}`),
   getFieldDetails: (id: number) => request.get<WordRoot[]>(`/admin/fields/${id}`),
+
+    // 用户管理接口
+  getUsers: () => request.get<any[]>('/admin/users'),
+  updateUserRole: (id: number, role: string) => request.put(`/admin/users/${id}`, { role }),
+  deleteUser: (id: number) => request.delete(`/admin/users/${id}`),
+
+    // 管理员创建用户
+  adminCreateUser: (data: any) => request.post('/admin/users', data),
 };

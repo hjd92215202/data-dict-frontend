@@ -27,13 +27,7 @@
           <el-icon><UserFilled /></el-icon>
           <span>用户权限管理</span>
         </el-menu-item>
-        
-        <el-divider style="border-color: #3d4d66" />
-        
-        <el-menu-item index="/">
-          <el-icon><Back /></el-icon>
-          <span>返回查询门户</span>
-        </el-menu-item>
+
       </el-menu>
     </el-aside>
 
@@ -86,7 +80,6 @@ import {
   DataAnalysis, 
   Collection, 
   DataLine, 
-  Back, 
   UserFilled, 
   ArrowDown, 
   SwitchButton 

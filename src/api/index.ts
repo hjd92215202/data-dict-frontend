@@ -1,6 +1,7 @@
 import axios from 'axios';
 import router from '../router';
 import type { WordRoot, SuggestResponse, StandardField, AuthPayload, AuthResponse } from '../types';
+import { ElMessage } from 'element-plus';
 
 const request = axios.create({
   baseURL: '/api', // Vite 代理会将 /api 转发到 http://127.0.0.1:3000
@@ -20,9 +21,16 @@ request.interceptors.request.use((config) => {
 request.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401) {
-      localStorage.clear();
-      router.push('/login');
+    if (err.response) {
+      if (err.response.status === 401 || err.response.status === 403) {
+        // 只要是权限报错，不管是过期还是越权，一律视作“当前会话失效”
+        // 立即清除所有本地缓存并跳回登录，方便用户换号登录
+        localStorage.clear();
+        router.push('/login');
+        ElMessage.error('权限验证失败，请使用管理员账号重新登录');
+      } else {
+        ElMessage.error(err.response.data || '系统错误');
+      }
     }
     return Promise.reject(err);
   }

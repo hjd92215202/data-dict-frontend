@@ -1,6 +1,5 @@
 <template>
   <div class="user-nav">
-  <el-button link @click="$router.push('/admin')">进入后台管理</el-button>
 </div>
   <div class="user-search-container">
     <div class="search-header">

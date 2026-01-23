@@ -231,14 +231,14 @@ const handleAnalyze = () => {
       return;
     }
     try {
-      // 调用智能建议接口
       const { data } = await dictionaryApi.getSuggest(form.value.field_cn_name);
       form.value.field_en_name = data.suggested_en;
       missingWords.value = data.missing_words;
-      // 注意：这里需要后端在接口中返回 matched_ids，以便存入 composition_ids
-      matchedIds.value = (data as any).matched_ids || [];
+      // 这里的 data.matched_ids 必须赋值给 matchedIds.value
+      matchedIds.value = data.matched_ids || []; 
+      console.log("分析完成，拿到 ID 链:", matchedIds.value);
     } catch (e) {
-      console.error("解析失败");
+      console.error("解析失败", e);
     }
   }, 400);
 };
@@ -251,22 +251,23 @@ const submitForm = async () => {
     if (valid) {
       submitting.value = true;
       try {
-        // 1. 必须 await 接口请求
+        // 【关键改动】手动组装 payload，确保 composition_ids 不为空
+        const payload = {
+          ...form.value,
+          composition_ids: matchedIds.value // 强制覆盖
+        };
+        
+        console.log("准备提交的数据:", payload);
+
         if (form.value.id) {
-          await dictionaryApi.updateField(form.value.id, form.value);
+          await dictionaryApi.updateField(form.value.id, payload);
         } else {
-          await dictionaryApi.createField(form.value);
+          await dictionaryApi.createField(payload);
         }
 
         ElMessage.success('保存成功');
-        
-        // 2. 关闭弹窗
         dialogVisible.value = false;
-
-        // 3. 核心：立即重新抓取最新数据
-        // 注意：一定要 await fetchFields，确保列表更新完成
         await fetchFields(); 
-        
       } catch (error: any) {
         ElMessage.error('保存失败');
       } finally {
@@ -290,14 +291,16 @@ const handleDelete = async (id: number) => {
 
 // 查看详情（组成解析）
 const showDetail = async (row: StandardField) => {
-  selectedField.value = row;
-  drawerVisible.value = true;
-  try {
-    const { data } = await dictionaryApi.getFieldDetails(row.id!);
-    detailRoots.value = data;
-  } catch (e) {
-    ElMessage.error('加载引用词根失败');
-  }
+    selectedField.value = row;
+    detailRoots.value = []; // 先清空，防止看到上一个字段的词根
+    drawerVisible.value = true;
+    try {
+        const { data } = await dictionaryApi.getFieldDetails(row.id!);
+        console.log("获取到的词根链条:", data); // 调试用
+        detailRoots.value = data;
+    } catch (e) {
+        ElMessage.error("加载详情失败");
+    }
 };
 
 // 弹窗控制

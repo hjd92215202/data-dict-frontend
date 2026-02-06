@@ -12,6 +12,7 @@
     <el-table :data="filteredRoots" border v-loading="loading" style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column prop="cn_name" label="中文名称" width="150" />
+      <el-table-column prop="en_full_name" label="英文全称" width="150" show-overflow-tooltip />
       <el-table-column prop="en_abbr" label="英文缩写" width="150">
         <template #default="{ row }">
           <code class="en-code">{{ row.en_abbr }}</code>
@@ -42,6 +43,9 @@
       <el-form :model="form" label-width="100px" ref="formRef" :rules="rules">
         <el-form-item label="中文名称" prop="cn_name">
           <el-input v-model="form.cn_name" placeholder="如：金额" />
+        </el-form-item>
+        <el-form-item label="英文全称" prop="en_full_name">
+          <el-input v-model="form.en_full_name" placeholder="如：Amount" />
         </el-form-item>
         <el-form-item label="英文缩写" prop="en_abbr">
           <el-input v-model="form.en_abbr" placeholder="如：amt" />
@@ -153,7 +157,7 @@ const saveRoot = async () => {
           await dictionaryApi.createRoot(form.value);
           ElMessage.success('新增成功');
         }
-        
+
         dialogVisible.value = false;
         await fetchRoots(); // 刷新列表
       } catch (error: any) {

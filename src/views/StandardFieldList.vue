@@ -49,7 +49,7 @@
       width="600px"
       @closed="resetForm"
     >
-      <el-form :model="form"  label-width="110px" ref="formRef" :rules="rules">
+      <el-form :model="form" label-width="110px" ref="formRef" :rules="rules">
         <el-form-item label="标准中文名" prop="field_cn_name">
           <el-input 
             v-model="form.field_cn_name" 
@@ -58,21 +58,33 @@
           />
         </el-form-item>
 
-        <!-- 核心业务约束展示区 -->
         <div class="analysis-box">
           <div class="box-title">词根组合校验结果：</div>
           
-          <!-- 情况A：存在缺失词根 -->
           <div v-if="missingWords.length > 0" class="status-error">
-            <el-alert type="error" :closable="false" show-icon>
+            <el-alert type="error" :closable="false">
               <template #title>
                 无法生成：词项 [ {{ missingWords.join(', ') }} ] 未标准化
               </template>
-              <p>请先在“词根管理”中录入以上词汇，否则无法创建标准字段。</p>
+              <div class="missing-actions">
+                <p>请先在“词根管理”中录入以上词汇。</p>
+                <div class="search-btns">
+                  <el-button 
+                    v-for="word in missingWords" 
+                    :key="word"
+                    size="small" 
+                    type="primary" 
+                    plain 
+                    :icon="Search"
+                    @click="searchSimilar(word)"
+                  >
+                    找词: {{ word }}
+                  </el-button>
+                </div>
+              </div>
             </el-alert>
           </div>
 
-          <!-- 情况B：解析成功 -->
           <div v-else-if="form.field_en_name" class="status-success">
             <el-alert type="success" :closable="false" show-icon>
               <template #title>
@@ -86,15 +98,11 @@
               </div>
             </el-alert>
           </div>
-          
           <div v-else class="status-empty">等待输入中文名进行解析...</div>
         </div>
 
         <el-form-item label="同义词" prop="associated_terms">
-          <el-input 
-            v-model="form.associated_terms" 
-            placeholder="用逗号隔开，用于用户模糊搜索，如：手机,移动电话" 
-          />
+          <el-input v-model="form.associated_terms" placeholder="用逗号隔开，用于用户模糊搜索" />
         </el-form-item>
 
         <el-form-item label="数据类型" prop="data_type">
@@ -102,10 +110,8 @@
             <el-option label="VARCHAR(50)" value="VARCHAR(50)" />
             <el-option label="VARCHAR(100)" value="VARCHAR(100)" />
             <el-option label="INT" value="INT" />
-            <el-option label="BIGINT" value="BIGINT" />
             <el-option label="DECIMAL(18,2)" value="DECIMAL(18,2)" />
             <el-option label="TIMESTAMP" value="TIMESTAMP" />
-            <el-option label="BOOLEAN" value="BOOLEAN" />
           </el-select>
         </el-form-item>
       </el-form>
@@ -123,6 +129,19 @@
       </template>
     </el-dialog>
 
+    <!-- 语义相似搜索弹窗 -->
+    <el-dialog v-model="similarDialogVisible" :title="`针对【${searchingWord}】的推荐词根`" width="450px">
+      <el-table :data="similarRoots" size="small" border>
+        <el-table-column prop="cn_name" label="已有词根" />
+        <el-table-column prop="en_abbr" label="缩写" />
+        <el-table-column label="相似度" width="100">
+          <template #default="{ row }">
+            {{ (row.score * 100).toFixed(1) }}%
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
+
     <!-- 组成详情抽屉 -->
     <el-drawer v-model="drawerVisible" title="标准字段组成解析" size="400px">
       <div v-if="selectedField" class="detail-content">
@@ -131,7 +150,7 @@
           <el-descriptions-item label="英文名称">{{ selectedField.field_en_name }}</el-descriptions-item>
         </el-descriptions>
         
-        <h4 style="margin-top: 25px">原子词根链 (Composition)</h4>
+        <h4 style="margin-top: 25px">原子词根链</h4>
         <el-timeline style="margin-top: 15px">
           <el-timeline-item
             v-for="root in detailRoots"
@@ -161,17 +180,22 @@ import type { StandardField, WordRoot } from '../types';
 import { ElMessage } from 'element-plus';
 
 const formRef = ref();
-// --- 状态变量 ---
 const loading = ref(false);
 const submitting = ref(false);
 const fields = ref<StandardField[]>([]);
 const searchQuery = ref('');
-
 const dialogVisible = ref(false);
 const drawerVisible = ref(false);
 
+const similarDialogVisible = ref(false);
+const similarRoots = ref<any[]>([]);
+const searchingWord = ref('');
+
 const missingWords = ref<string[]>([]);
 const matchedIds = ref<number[]>([]);
+
+const selectedField = ref<StandardField | null>(null);
+const detailRoots = ref<WordRoot[]>([]);
 
 const form = ref<any>({
   id: undefined,
@@ -187,17 +211,11 @@ const rules = {
   data_type: [{ required: true, message: '请选择数据类型', trigger: 'change' }]
 };
 
-const selectedField = ref<StandardField | null>(null);
-const detailRoots = ref<WordRoot[]>([]);
-
-// --- 核心逻辑 ---
-
-// 获取字段列表
+// 1. 获取列表
 const fetchFields = async () => {
   loading.value = true;
   try {
     const { data } = await dictionaryApi.getFields();
-    // 确保直接覆盖了 fields.value
     fields.value = data; 
   } catch (e) {
     ElMessage.error('获取列表失败');
@@ -206,20 +224,7 @@ const fetchFields = async () => {
   }
 };
 
-
-
-// 列表过滤逻辑
-const filteredFields = computed(() => {
-  const q = searchQuery.value.toLowerCase().trim();
-  if (!q) return fields.value;
-  return fields.value.filter(f => 
-    f.field_cn_name.toLowerCase().includes(q) || 
-    f.field_en_name.toLowerCase().includes(q) ||
-    (f.associated_terms && f.associated_terms.toLowerCase().includes(q))
-  );
-});
-
-// 核心：处理解析建议 (管理员录入时的强校验)
+// 2. 解析建议
 let timer: any = null;
 const handleAnalyze = () => {
   if (timer) clearTimeout(timer);
@@ -234,155 +239,89 @@ const handleAnalyze = () => {
       const { data } = await dictionaryApi.getSuggest(form.value.field_cn_name);
       form.value.field_en_name = data.suggested_en;
       missingWords.value = data.missing_words;
-      // 这里的 data.matched_ids 必须赋值给 matchedIds.value
       matchedIds.value = data.matched_ids || []; 
-      console.log("分析完成，拿到 ID 链:", matchedIds.value);
-    } catch (e) {
-      console.error("解析失败", e);
-    }
+    } catch (e) { console.error(e); }
   }, 400);
 };
 
-// 保存字段
+// 3. 语义搜索
+const searchSimilar = async (word: string) => {
+  searchingWord.value = word;
+  try {
+    const { data } = await dictionaryApi.getSimilarRoots(word);
+    similarRoots.value = data;
+    similarDialogVisible.value = true;
+  } catch (e) { ElMessage.error("检索失败"); }
+};
+
+// 4. 保存
 const submitForm = async () => {
   if (!formRef.value) return;
-  
   await formRef.value.validate(async (valid: boolean) => {
     if (valid) {
       submitting.value = true;
       try {
-        // 【关键改动】手动组装 payload，确保 composition_ids 不为空
-        const payload = {
-          ...form.value,
-          composition_ids: matchedIds.value // 强制覆盖
-        };
-        
-        console.log("准备提交的数据:", payload);
-
+        const payload = { ...form.value, composition_ids: matchedIds.value };
         if (form.value.id) {
           await dictionaryApi.updateField(form.value.id, payload);
         } else {
           await dictionaryApi.createField(payload);
         }
-
         ElMessage.success('保存成功');
         dialogVisible.value = false;
-        await fetchFields(); 
-      } catch (error: any) {
-        ElMessage.error('保存失败');
-      } finally {
-        submitting.value = false;
-      }
+        fetchFields();
+      } catch (e) { ElMessage.error('保存失败'); } finally { submitting.value = false; }
     }
   });
 };
 
-// 删除字段
+// 5. 删除
 const handleDelete = async (id: number) => {
   try {
     await dictionaryApi.deleteField(id);
     ElMessage.success('已删除');
-    // 删除后必须重新获取列表
-    await fetchFields(); 
-  } catch (e) {
-    ElMessage.error('删除失败');
-  }
+    fetchFields();
+  } catch (e) { ElMessage.error('删除失败'); }
 };
 
-// 查看详情（组成解析）
+// 6. 详情
 const showDetail = async (row: StandardField) => {
-    selectedField.value = row;
-    detailRoots.value = []; // 先清空，防止看到上一个字段的词根
-    drawerVisible.value = true;
-    try {
-        const { data } = await dictionaryApi.getFieldDetails(row.id!);
-        console.log("获取到的词根链条:", data); // 调试用
-        detailRoots.value = data;
-    } catch (e) {
-        ElMessage.error("加载详情失败");
-    }
+  selectedField.value = row;
+  detailRoots.value = [];
+  drawerVisible.value = true;
+  try {
+    const { data } = await dictionaryApi.getFieldDetails(row.id!);
+    detailRoots.value = data;
+  } catch (e) { ElMessage.error("加载失败"); }
 };
 
-// 弹窗控制
-const openAddDialog = () => {
-  resetForm();
-  dialogVisible.value = true;
-};
-
-const handleEdit = (row: StandardField) => {
-  form.value = { ...row };
-  // 编辑时也需要运行一遍解析逻辑以同步 ID 链和英文名状态
+const openAddDialog = () => { resetForm(); dialogVisible.value = true; };
+const handleEdit = (row: StandardField) => { 
+  form.value = { ...row }; 
   handleAnalyze(); 
-  dialogVisible.value = true;
+  dialogVisible.value = true; 
 };
-
 const resetForm = () => {
-  form.value = {
-    id: undefined,
-    field_cn_name: '',
-    field_en_name: '',
-    associated_terms: '',
-    data_type: 'VARCHAR(100)',
-    composition_ids: []
-  };
+  form.value = { id: undefined, field_cn_name: '', field_en_name: '', associated_terms: '', data_type: 'VARCHAR(100)', composition_ids: [] };
   missingWords.value = [];
   matchedIds.value = [];
 };
+
+const filteredFields = computed(() => {
+  const q = searchQuery.value.toLowerCase().trim();
+  if (!q) return fields.value;
+  return fields.value.filter(f => f.field_cn_name.includes(q) || f.field_en_name.includes(q));
+});
 
 onMounted(fetchFields);
 </script>
 
 <style scoped>
-.field-container {
-  padding: 10px;
-}
-
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.en-code {
-  background: #f0f7ff;
-  color: #409eff;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-family: 'Consolas', monospace;
-  font-weight: bold;
-}
-
-.analysis-box {
-  background: #f8f9fa;
-  padding: 15px;
-  border-radius: 8px;
-  margin: 0 0 20px 110px;
-  border: 1px dashed #dcdfe6;
-}
-
-.box-title {
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 10px;
-}
-
-.status-empty {
-  color: #c0c4cc;
-  font-size: 13px;
-  text-align: center;
-}
-
-.root-chain {
-  margin-top: 8px;
-  font-size: 12px;
-  color: #666;
-}
-
-.id-tag {
-  margin: 0 2px;
-}
-
-.detail-content {
-  padding: 0 10px;
-}
+.en-code { background: #f0f7ff; color: #409eff; padding: 3px 8px; border-radius: 4px; font-family: monospace; font-weight: bold; }
+.analysis-box { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px dashed #dcdfe6; }
+.box-title { font-size: 12px; color: #909399; margin-bottom: 10px; }
+.missing-actions { margin-top: 8px; }
+.search-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.toolbar { display: flex; justify-content: space-between; margin-bottom: 20px; }
+.field-container { padding: 10px; }
 </style>

@@ -1,18 +1,15 @@
 <template>
-  <div class="user-nav">
-</div>
   <div class="user-search-container">
     <div class="search-header">
-      <h1>数据标准字典查询</h1>
-      <p>搜索已定义的标准字段，确保研发命名规范统一</p>
+      <h1>数据标准查询门户</h1>
+      <p>输入业务术语，获取研发标准命名</p>
     </div>
 
     <div class="search-main">
       <el-input
         v-model="queryText"
-        placeholder="输入中文字段名称 (如: 手机号, 客户名称)"
+        placeholder="输入中文名称 (如: 支付金额)"
         size="large"
-        clearable
         @keyup.enter="doSearch"
       >
         <template #append>
@@ -21,37 +18,48 @@
       </el-input>
 
       <div class="result-list" v-loading="loading">
+        <!-- 1. 标准字段结果 (含语义匹配评分) -->
         <template v-if="results.length > 0">
+          <div class="section-tag">找到以下标准定义：</div>
           <el-card v-for="item in results" :key="item.id" class="result-item">
             <div class="item-content">
               <div class="info">
-                <div class="cn-name">{{ item.field_cn_name }}</div>
+                <div class="cn-row">
+                  <span class="cn-name">{{ item.field_cn_name }}</span>
+                  <el-tag v-if="item.score" size="small" type="warning" effect="plain" class="score-tag">
+                    语义匹配 {{ (item.score * 100).toFixed(0) }}%
+                  </el-tag>
+                </div>
                 <div class="en-name">{{ item.field_en_name }}</div>
               </div>
               <div class="meta">
                 <el-tag size="small">{{ item.data_type }}</el-tag>
-                <div class="time">发布于 {{ new Date(item.created_at).toLocaleDateString() }}</div>
               </div>
             </div>
           </el-card>
         </template>
 
+        <!-- 2. 词根级推荐 (当没有完整字段命中时) -->
         <div v-if="results.length === 0 && similarRoots.length > 0" class="recommend-box">
-        <el-alert title="未找到精准标准字段，为您推荐相关标准词根：" type="info" show-icon :closable="false" />
-        <div class="similar-list">
-          <el-card v-for="root in similarRoots" :key="root.id" class="root-mini-card" shadow="hover">
-            <div class="flex-between">
-              <span class="root-cn">{{ root.cn_name }}</span>
-              <el-tag size="small">语义匹配度 {{ (root.score * 100).toFixed(1) }}%</el-tag>
-            </div>
-            <code class="root-en">{{ root.en_abbr }}</code>
-          </el-card>
+          <el-alert 
+            title="未找到直接关联的标准字段，建议参考以下原子词根进行组合：" 
+            type="info" 
+            :closable="false" 
+            show-icon 
+          />
+          <div class="similar-list">
+            <el-card v-for="root in similarRoots" :key="root.id" class="root-mini-card" shadow="hover">
+              <div class="flex-between">
+                <span class="root-cn">{{ root.cn_name }}</span>
+                <span class="root-en">{{ root.en_abbr }}</span>
+              </div>
+              <div class="root-full">{{ root.en_full_name || '-' }}</div>
+            </el-card>
+          </div>
         </div>
-      </div>
 
-        <el-empty v-else-if="hasSearched" description="未找到标准定义">
-          <p class="empty-tip">请联系管理员在后台新增此标准字段</p>
-          <el-button type="primary" plain @click="requestNew">提交新增申请</el-button>
+        <el-empty v-else-if="hasSearched && results.length === 0" description="暂无相关标准">
+          <el-button type="primary" plain @click="requestNew">申请新增标准</el-button>
         </el-empty>
       </div>
     </div>
@@ -112,4 +120,12 @@ const requestNew = () => {
 .meta { text-align: right; }
 .time { font-size: 12px; color: #999; margin-top: 8px; }
 .user-nav { position: absolute; top: 20px; right: 20px; }
+.section-tag { font-size: 12px; color: #909399; margin-bottom: 10px; }
+.cn-row { display: flex; align-items: center; gap: 10px; }
+.score-tag { font-size: 10px; }
+.root-mini-card { margin-top: 10px; background: #fdfdfd; }
+.root-cn { font-weight: bold; color: #409EFF; }
+.root-en { font-family: monospace; color: #67C23A; }
+.root-full { font-size: 12px; color: #999; margin-top: 5px; }
+.flex-between { display: flex; justify-content: space-between; }
 </style>

@@ -16,6 +16,7 @@ export interface WordRoot {
   associated_terms?: string;
   remark?: string;
   created_at?: string;
+  score?: number;
 }
 
 export interface SuggestResponse {
@@ -33,4 +34,5 @@ export interface StandardField {
   associated_terms?: string;
   is_standard: boolean;
   created_at?: string;
+  score?: number;
 }

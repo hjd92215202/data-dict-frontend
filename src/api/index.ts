@@ -2,6 +2,7 @@ import axios from 'axios';
 import router from '../router';
 import type { WordRoot, SuggestResponse, StandardField, AuthPayload, AuthResponse } from '../types';
 import { ElMessage } from 'element-plus';
+import { logger } from '../utils/logger';
 
 const request = axios.create({
   baseURL: '/api', // Vite 代理会将 /api 转发到 http://127.0.0.1:3000
@@ -14,13 +15,28 @@ request.interceptors.request.use((config) => {
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  logger.debug("Network", `>>> 发起请求 [${config.method?.toUpperCase()}] ${config.url}`, config.params || config.data);
+
   return config;
 });
 
 // 响应拦截器：统一处理 401/403 错误
 request.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    logger.debug("Network", `<<< 收到响应 [${res.status}] ${res.config.url}`, res.data);
+    return res;
+  },
   (err) => {
+
+    const status = err.response?.status;
+    const url = err.config?.url;
+
+    logger.error("Network", `!!! 请求异常 [${status || 'TIMEOUT'}] ${url}`, {
+      message: err.message,
+      data: err.response?.data
+    });
+
     if (err.response) {
       if (err.response.status === 401 || err.response.status === 403) {
         // 只要是权限报错，不管是过期还是越权，一律视作“当前会话失效”

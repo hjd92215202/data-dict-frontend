@@ -3,8 +3,8 @@
     <!-- 顶部操作栏 -->
     <div class="toolbar">
       <div class="left">
-        <el-input v-model="searchQuery" placeholder="搜索标准名或同义词..." style="width: 320px" :prefix-icon="Search"
-          clearable @input="handleSearchLog" />
+        <el-input v-model="searchQuery" placeholder="搜索标准名或同义词..." style="width: 320px;" :prefix-icon="Search" clearable
+          @input="handleSearchLog" />
       </div>
       <div class="right">
         <!-- 导出按钮 -->
@@ -165,19 +165,7 @@ import { dictionaryApi } from '../api';
 import type { StandardField, WordRoot } from '../types';
 import { ElMessageBox, ElMessage, ElLoading } from 'element-plus';
 import * as XLSX from 'xlsx';
-
-// --- 前端日志助手 ---
-const logger = {
-  info: (action: string, data?: any) => {
-    console.log(`%c[Action: ${action}]%c`, "color:white;background:#409eff;padding:2px 5px;border-radius:3px", "color:#333", data || "");
-  },
-  error: (action: string, err: any) => {
-    console.error(`%c[Error: ${action}]%c`, "color:white;background:#f56c6c;padding:2px 5px;border-radius:3px", "color:#f56c6c", err);
-  },
-  warn: (action: string, msg: string) => {
-    console.warn(`%c[Warn: ${action}]%c`, "color:white;background:#e6a23c;padding:2px 5px;border-radius:3px", "color:#333", msg);
-  }
-};
+import { logger } from '../utils/logger';
 
 const formRef = ref();
 const loading = ref(false);
@@ -213,15 +201,14 @@ const rules = {
 
 // 1. 获取列表
 const fetchFields = async () => {
-  logger.info("开始加载标准字段列表");
+  logger.info("Field:UI", "请求加载标准字段列表数据");
   loading.value = true;
   try {
     const { data } = await dictionaryApi.getFields();
     fields.value = data;
-    logger.info("列表加载成功", `数量: ${data.length}`);
+    logger.debug("Field:Data", "字段列表同步完成", { count: data.length });
   } catch (e) {
-    logger.error("获取列表失败", e);
-    ElMessage.error('获取列表失败');
+    // 接口拦截器已记录网络日志
   } finally {
     loading.value = false;
   }
@@ -238,37 +225,41 @@ const handleAnalyze = () => {
       matchedIds.value = [];
       return;
     }
-    logger.info("正在执行词根切分分析", form.value.field_cn_name);
+    logger.info("Field:Service", "启动词根切分异步分析", { input: form.value.field_cn_name });
     try {
       const { data } = await dictionaryApi.getSuggest(form.value.field_cn_name);
       form.value.field_en_name = data.suggested_en;
       missingWords.value = data.missing_words;
       matchedIds.value = data.matched_ids || [];
-      logger.info("词根分析完成", data);
+      
+      if (data.missing_words.length > 0) {
+        logger.warn("Field:Service", "分析完成：存在未标准化词汇", data.missing_words);
+      } else {
+        logger.info("Field:Service", "分析完成：全词根匹配成功", data.suggested_en);
+      }
     } catch (e) { 
-      logger.error("切分分析异常", e);
+      // 错误已由拦截器捕获
     }
   }, 400);
 };
 
 // 3. 语义搜索词根
 const searchSimilar = async (word: string) => {
-  logger.info("正在语义找词", word);
+  logger.info("Field:Service", "触发语义找词请求", { word });
   searchingWord.value = word;
   try {
     const { data } = await dictionaryApi.getSimilarRoots(word);
     similarRoots.value = data;
     similarDialogVisible.value = true;
-    logger.info("语义找词结果召回", data);
-  } catch (e) { 
-    logger.error("语义找词请求失败", e);
-    ElMessage.error("检索失败"); 
+    logger.debug("Field:Service", "语义召回数据完毕", data);
+  } catch (e) {
+    ElMessage.error("检索失败");
   }
 };
 
-// 4. Excel 导出逻辑 (所见即所得)
+// 4. Excel 导出逻辑
 const handleExport = () => {
-  logger.info("执行 Excel 导出", `导出条数: ${filteredFields.value.length}`);
+  logger.info("Field:Action", "触发导出 Excel 备份任务", { visibleCount: filteredFields.value.length });
   try {
     const exportData = filteredFields.value.map((f, index) => ({
       "序号": index + 1,
@@ -282,13 +273,13 @@ const handleExport = () => {
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "数据标准清单");
-    
+
     const timeMark = new Date().getTime();
-    XLSX.writeFile(wb, `数据标准导出_${timeMark}.xlsx`);
-    logger.info("Excel 导出任务已推送到浏览器下载");
+    XLSX.writeFile(wb, `标准字段导出_${timeMark}.xlsx`);
+    logger.info("Field:Action", "Excel 文件生成成功并下发下载指令");
     ElMessage.success("导出成功");
   } catch (err) {
-    logger.error("导出过程中发生代码异常", err);
+    logger.error("Field:Action", "导出组件运行时异常", err);
     ElMessage.error("导出异常，请查看控制台");
   }
 };
@@ -298,23 +289,21 @@ const submitForm = async () => {
   if (!formRef.value) return;
   await formRef.value.validate(async (valid: boolean) => {
     if (valid) {
-      logger.info("准备提交保存请求", form.value);
+      const isEdit = !!form.value.id;
+      logger.info("Field:Action", isEdit ? "提交字段更新请求" : "提交新增字段请求", form.value);
       submitting.value = true;
       try {
         const payload = { ...form.value, composition_ids: matchedIds.value };
-        if (form.value.id) {
+        if (isEdit) {
           await dictionaryApi.updateField(form.value.id, payload);
-          logger.info("字段更新成功", `ID: ${form.value.id}`);
         } else {
           await dictionaryApi.createField(payload);
-          logger.info("新字段创建成功");
         }
         ElMessage.success('保存成功');
         dialogVisible.value = false;
         fetchFields();
-      } catch (e) { 
-        logger.error("保存接口返回错误", e);
-        ElMessage.error('保存失败'); 
+      } catch (e) {
+        // 错误已由拦截器记录
       } finally { submitting.value = false; }
     }
   });
@@ -322,45 +311,50 @@ const submitForm = async () => {
 
 // 6. 删除
 const handleDelete = async (id: number) => {
-  logger.warn("删除操作", `准备删除 ID: ${id}`);
+  logger.warn("Field:Action", `执行物理删除指令，目标ID: ${id}`);
   try {
     await dictionaryApi.deleteField(id);
     ElMessage.success('已删除');
     fetchFields();
-  } catch (e) { 
-    logger.error("删除失败", e);
-    ElMessage.error('删除失败'); 
+  } catch (e) {
+    // 错误已处理
   }
 };
 
 // 7. 详情
 const showDetail = async (row: StandardField) => {
-  logger.info("查看字段引用详情", row.id);
+  logger.debug("Field:UI", "打开字段引用链抽屉", { fieldId: row.id });
   selectedField.value = row;
   detailRoots.value = [];
   drawerVisible.value = true;
   try {
     const { data } = await dictionaryApi.getFieldDetails(row.id!);
     detailRoots.value = data;
-    logger.info("引用详情解析成功", data);
-  } catch (e) { 
-    logger.error("获取引用详情失败", e);
-    ElMessage.error("加载失败"); 
+    logger.info("Field:Service", "字段组成链路解析成功", { count: data.length });
+  } catch (e) {
+    ElMessage.error("详情加载失败");
   }
 };
 
 const handleSearchLog = () => {
   if (searchQuery.value) {
-    logger.info("执行关键词搜索", searchQuery.value);
+    logger.debug("Field:UI", "执行列表本地过滤搜索", { query: searchQuery.value });
   }
 };
 
-const openAddDialog = () => { resetForm(); dialogVisible.value = true; };
+const openAddDialog = () => { 
+  logger.debug("Field:UI", "打开新增字段对话框");
+  resetForm(); 
+  dialogVisible.value = true; 
+};
+
 const handleEdit = (row: StandardField) => {
+  logger.debug("Field:UI", "进入字段编辑模式", { id: row.id });
   form.value = { ...row };
   handleAnalyze();
   dialogVisible.value = true;
 };
+
 const resetForm = () => {
   form.value = { id: undefined, field_cn_name: '', field_en_name: '', associated_terms: '', data_type: 'VARCHAR(100)', composition_ids: [] };
   missingWords.value = [];
@@ -370,34 +364,32 @@ const resetForm = () => {
 const filteredFields = computed(() => {
   const q = searchQuery.value.toLowerCase().trim();
   if (!q) return fields.value;
-  return fields.value.filter(f => f.field_cn_name.toLowerCase().includes(q) || f.field_en_name.toLowerCase().includes(q));
+  return fields.value.filter(f => 
+    f.field_cn_name.toLowerCase().includes(q) || 
+    f.field_en_name.toLowerCase().includes(q)
+  );
 });
 
 const handleClearAll = () => {
   ElMessageBox.confirm(
-    '警告：此操作将永久清空标准库和向量索引，用户将无法搜索到任何字段！是否继续？',
-    '危险操作警告',
-    {
-      confirmButtonText: '确定清空',
-      cancelButtonText: '取消',
-      type: 'error',
-    }
+    '警告：此操作将永久清空标准库和向量索引，用户将无法搜索到任何字段！',
+    '高危操作确认',
+    { confirmButtonText: '确定清空', cancelButtonText: '取消', type: 'error' }
   ).then(async () => {
-    logger.warn("危险操作", "正在执行一键清空全部标准字段");
-    const loadingInstance = ElLoading.service({ text: '正在彻底清理数据...' });
+    logger.warn("Field:Action", "正在执行一键全量清空（TRUNCATE/Filter:ALL）");
+    const loadingInstance = ElLoading.service({ text: '正在清理索引与数据库...' });
     try {
       const res = await dictionaryApi.clearAllFields();
-      logger.info("全量清空任务成功完成", res.data);
+      logger.info("Field:Action", "标准字段库全量清理任务已完成", res.data);
       ElMessage.success(res.data);
       await fetchFields();
     } catch (e) {
-      logger.error("清空操作执行失败", e);
-      ElMessage.error("清理失败");
+      // 错误处理
     } finally {
       loadingInstance.close();
     }
   }).catch(() => {
-    logger.info("清空操作已被用户取消");
+    logger.debug("Field:UI", "用户取消了清空操作");
   });
 };
 

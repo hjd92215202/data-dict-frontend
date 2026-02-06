@@ -3,15 +3,21 @@
     <!-- 顶部操作栏 -->
     <div class="toolbar">
       <div class="left">
-        <el-input
-          v-model="searchQuery"
-          placeholder="搜索标准名或同义词..."
-          style="width: 320px"
-          :prefix-icon="Search"
-          clearable
-        />
+        <el-input v-model="searchQuery" placeholder="搜索标准名或同义词..." style="width: 320px" :prefix-icon="Search"
+          clearable @input="handleSearchLog" />
       </div>
       <div class="right">
+        <!-- 导出按钮 -->
+        <el-button type="success" :icon="Download" @click="handleExport" :disabled="fields.length === 0">
+          导出备份
+        </el-button>
+
+        <el-button type="danger" plain :icon="Delete" @click="handleClearAll">
+          清空所有
+        </el-button>
+
+        <el-divider direction="vertical" />
+
         <el-button type="primary" :icon="Plus" @click="openAddDialog">
           新增标准字段
         </el-button>
@@ -20,7 +26,7 @@
 
     <!-- 数据表格 -->
     <el-table :data="filteredFields" border v-loading="loading" row-key="id" style="width: 100%">
-      <el-table-column prop="id" label="ID" width="70" />
+      <el-table-column prop="id" label="ID" width="70" align="center" />
       <el-table-column prop="field_cn_name" label="标准中文名" width="180" />
       <el-table-column prop="field_en_name" label="英文标准名" width="220">
         <template #default="{ row }">
@@ -29,7 +35,12 @@
       </el-table-column>
       <el-table-column prop="associated_terms" label="同义词/关联词" show-overflow-tooltip />
       <el-table-column prop="data_type" label="数据类型" width="130" />
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column prop="created_at" label="创建时间" width="160">
+        <template #default="{ row }">
+          {{ row.created_at ? new Date(row.created_at).toLocaleString() : '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="200" fixed="right" align="center">
         <template #default="{ row }">
           <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
           <el-button link type="info" @click="showDetail(row)">组成详情</el-button>
@@ -43,24 +54,15 @@
     </el-table>
 
     <!-- 新增/编辑弹窗 -->
-    <el-dialog
-      v-model="dialogVisible"
-      :title="form.id ? '修改标准字段' : '新增标准字段'"
-      width="600px"
-      @closed="resetForm"
-    >
+    <el-dialog v-model="dialogVisible" :title="form.id ? '修改标准字段' : '新增标准字段'" width="600px" @closed="resetForm">
       <el-form :model="form" label-width="110px" ref="formRef" :rules="rules">
         <el-form-item label="标准中文名" prop="field_cn_name">
-          <el-input 
-            v-model="form.field_cn_name" 
-            placeholder="如：收货人手机号" 
-            @input="handleAnalyze"
-          />
+          <el-input v-model="form.field_cn_name" placeholder="如：收货人手机号" @input="handleAnalyze" />
         </el-form-item>
 
         <div class="analysis-box">
           <div class="box-title">词根组合校验结果：</div>
-          
+
           <div v-if="missingWords.length > 0" class="status-error">
             <el-alert type="error" :closable="false">
               <template #title>
@@ -69,15 +71,8 @@
               <div class="missing-actions">
                 <p>请先在“词根管理”中录入以上词汇。</p>
                 <div class="search-btns">
-                  <el-button 
-                    v-for="word in missingWords" 
-                    :key="word"
-                    size="small" 
-                    type="primary" 
-                    plain 
-                    :icon="Search"
-                    @click="searchSimilar(word)"
-                  >
+                  <el-button v-for="word in missingWords" :key="word" size="small" type="primary" plain :icon="Search"
+                    @click="searchSimilar(word)">
                     找词: {{ word }}
                   </el-button>
                 </div>
@@ -91,7 +86,7 @@
                 验证通过：生成的英文名为 <b>{{ form.field_en_name }}</b>
               </template>
               <div class="root-chain">
-                关联词根ID链: 
+                关联词根ID链:
                 <el-tag v-for="id in matchedIds" :key="id" size="small" class="id-tag">
                   {{ id }}
                 </el-tag>
@@ -102,7 +97,7 @@
         </div>
 
         <el-form-item label="同义词" prop="associated_terms">
-          <el-input v-model="form.associated_terms" placeholder="用逗号隔开，用于用户模糊搜索" />
+          <el-input v-model="form.associated_terms" placeholder="多个同义词用空格隔开，方便用户搜索" />
         </el-form-item>
 
         <el-form-item label="数据类型" prop="data_type">
@@ -118,12 +113,8 @@
 
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button 
-          type="primary" 
-          @click="submitForm" 
-          :loading="submitting"
-          :disabled="missingWords.length > 0 || !form.field_en_name"
-        >
+        <el-button type="primary" @click="submitForm" :loading="submitting"
+          :disabled="missingWords.length > 0 || !form.field_en_name">
           确认提交
         </el-button>
       </template>
@@ -149,16 +140,11 @@
           <el-descriptions-item label="中文名称">{{ selectedField.field_cn_name }}</el-descriptions-item>
           <el-descriptions-item label="英文名称">{{ selectedField.field_en_name }}</el-descriptions-item>
         </el-descriptions>
-        
+
         <h4 style="margin-top: 25px">原子词根链</h4>
         <el-timeline style="margin-top: 15px">
-          <el-timeline-item
-            v-for="root in detailRoots"
-            :key="root.id"
-            :timestamp="root.en_abbr"
-            placement="top"
-            type="primary"
-          >
+          <el-timeline-item v-for="root in detailRoots" :key="root.id" :timestamp="root.en_abbr" placement="top"
+            type="primary">
             <el-card shadow="never">
               <div style="font-weight: bold">{{ root.cn_name }}</div>
               <div style="font-size: 12px; color: #999; margin-top: 5px">
@@ -174,10 +160,24 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { Plus, Search } from '@element-plus/icons-vue';
+import { Delete, Plus, Search, Download } from '@element-plus/icons-vue';
 import { dictionaryApi } from '../api';
 import type { StandardField, WordRoot } from '../types';
-import { ElMessage } from 'element-plus';
+import { ElMessageBox, ElMessage, ElLoading } from 'element-plus';
+import * as XLSX from 'xlsx';
+
+// --- 前端日志助手 ---
+const logger = {
+  info: (action: string, data?: any) => {
+    console.log(`%c[Action: ${action}]%c`, "color:white;background:#409eff;padding:2px 5px;border-radius:3px", "color:#333", data || "");
+  },
+  error: (action: string, err: any) => {
+    console.error(`%c[Error: ${action}]%c`, "color:white;background:#f56c6c;padding:2px 5px;border-radius:3px", "color:#f56c6c", err);
+  },
+  warn: (action: string, msg: string) => {
+    console.warn(`%c[Warn: ${action}]%c`, "color:white;background:#e6a23c;padding:2px 5px;border-radius:3px", "color:#333", msg);
+  }
+};
 
 const formRef = ref();
 const loading = ref(false);
@@ -213,11 +213,14 @@ const rules = {
 
 // 1. 获取列表
 const fetchFields = async () => {
+  logger.info("开始加载标准字段列表");
   loading.value = true;
   try {
     const { data } = await dictionaryApi.getFields();
-    fields.value = data; 
+    fields.value = data;
+    logger.info("列表加载成功", `数量: ${data.length}`);
   } catch (e) {
+    logger.error("获取列表失败", e);
     ElMessage.error('获取列表失败');
   } finally {
     loading.value = false;
@@ -235,71 +238,128 @@ const handleAnalyze = () => {
       matchedIds.value = [];
       return;
     }
+    logger.info("正在执行词根切分分析", form.value.field_cn_name);
     try {
       const { data } = await dictionaryApi.getSuggest(form.value.field_cn_name);
       form.value.field_en_name = data.suggested_en;
       missingWords.value = data.missing_words;
-      matchedIds.value = data.matched_ids || []; 
-    } catch (e) { console.error(e); }
+      matchedIds.value = data.matched_ids || [];
+      logger.info("词根分析完成", data);
+    } catch (e) { 
+      logger.error("切分分析异常", e);
+    }
   }, 400);
 };
 
-// 3. 语义搜索
+// 3. 语义搜索词根
 const searchSimilar = async (word: string) => {
+  logger.info("正在语义找词", word);
   searchingWord.value = word;
   try {
     const { data } = await dictionaryApi.getSimilarRoots(word);
     similarRoots.value = data;
     similarDialogVisible.value = true;
-  } catch (e) { ElMessage.error("检索失败"); }
+    logger.info("语义找词结果召回", data);
+  } catch (e) { 
+    logger.error("语义找词请求失败", e);
+    ElMessage.error("检索失败"); 
+  }
 };
 
-// 4. 保存
+// 4. Excel 导出逻辑 (所见即所得)
+const handleExport = () => {
+  logger.info("执行 Excel 导出", `导出条数: ${filteredFields.value.length}`);
+  try {
+    const exportData = filteredFields.value.map((f, index) => ({
+      "序号": index + 1,
+      "标准中文名": f.field_cn_name,
+      "标准英文名": f.field_en_name,
+      "数据类型": f.data_type,
+      "关联同义词": f.associated_terms || '-',
+      "发布时间": f.created_at ? new Date(f.created_at).toLocaleString() : '-'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "数据标准清单");
+    
+    const timeMark = new Date().getTime();
+    XLSX.writeFile(wb, `数据标准导出_${timeMark}.xlsx`);
+    logger.info("Excel 导出任务已推送到浏览器下载");
+    ElMessage.success("导出成功");
+  } catch (err) {
+    logger.error("导出过程中发生代码异常", err);
+    ElMessage.error("导出异常，请查看控制台");
+  }
+};
+
+// 5. 保存
 const submitForm = async () => {
   if (!formRef.value) return;
   await formRef.value.validate(async (valid: boolean) => {
     if (valid) {
+      logger.info("准备提交保存请求", form.value);
       submitting.value = true;
       try {
         const payload = { ...form.value, composition_ids: matchedIds.value };
         if (form.value.id) {
           await dictionaryApi.updateField(form.value.id, payload);
+          logger.info("字段更新成功", `ID: ${form.value.id}`);
         } else {
           await dictionaryApi.createField(payload);
+          logger.info("新字段创建成功");
         }
         ElMessage.success('保存成功');
         dialogVisible.value = false;
         fetchFields();
-      } catch (e) { ElMessage.error('保存失败'); } finally { submitting.value = false; }
+      } catch (e) { 
+        logger.error("保存接口返回错误", e);
+        ElMessage.error('保存失败'); 
+      } finally { submitting.value = false; }
     }
   });
 };
 
-// 5. 删除
+// 6. 删除
 const handleDelete = async (id: number) => {
+  logger.warn("删除操作", `准备删除 ID: ${id}`);
   try {
     await dictionaryApi.deleteField(id);
     ElMessage.success('已删除');
     fetchFields();
-  } catch (e) { ElMessage.error('删除失败'); }
+  } catch (e) { 
+    logger.error("删除失败", e);
+    ElMessage.error('删除失败'); 
+  }
 };
 
-// 6. 详情
+// 7. 详情
 const showDetail = async (row: StandardField) => {
+  logger.info("查看字段引用详情", row.id);
   selectedField.value = row;
   detailRoots.value = [];
   drawerVisible.value = true;
   try {
     const { data } = await dictionaryApi.getFieldDetails(row.id!);
     detailRoots.value = data;
-  } catch (e) { ElMessage.error("加载失败"); }
+    logger.info("引用详情解析成功", data);
+  } catch (e) { 
+    logger.error("获取引用详情失败", e);
+    ElMessage.error("加载失败"); 
+  }
+};
+
+const handleSearchLog = () => {
+  if (searchQuery.value) {
+    logger.info("执行关键词搜索", searchQuery.value);
+  }
 };
 
 const openAddDialog = () => { resetForm(); dialogVisible.value = true; };
-const handleEdit = (row: StandardField) => { 
-  form.value = { ...row }; 
-  handleAnalyze(); 
-  dialogVisible.value = true; 
+const handleEdit = (row: StandardField) => {
+  form.value = { ...row };
+  handleAnalyze();
+  dialogVisible.value = true;
 };
 const resetForm = () => {
   form.value = { id: undefined, field_cn_name: '', field_en_name: '', associated_terms: '', data_type: 'VARCHAR(100)', composition_ids: [] };
@@ -310,18 +370,86 @@ const resetForm = () => {
 const filteredFields = computed(() => {
   const q = searchQuery.value.toLowerCase().trim();
   if (!q) return fields.value;
-  return fields.value.filter(f => f.field_cn_name.includes(q) || f.field_en_name.includes(q));
+  return fields.value.filter(f => f.field_cn_name.toLowerCase().includes(q) || f.field_en_name.toLowerCase().includes(q));
 });
+
+const handleClearAll = () => {
+  ElMessageBox.confirm(
+    '警告：此操作将永久清空标准库和向量索引，用户将无法搜索到任何字段！是否继续？',
+    '危险操作警告',
+    {
+      confirmButtonText: '确定清空',
+      cancelButtonText: '取消',
+      type: 'error',
+    }
+  ).then(async () => {
+    logger.warn("危险操作", "正在执行一键清空全部标准字段");
+    const loadingInstance = ElLoading.service({ text: '正在彻底清理数据...' });
+    try {
+      const res = await dictionaryApi.clearAllFields();
+      logger.info("全量清空任务成功完成", res.data);
+      ElMessage.success(res.data);
+      await fetchFields();
+    } catch (e) {
+      logger.error("清空操作执行失败", e);
+      ElMessage.error("清理失败");
+    } finally {
+      loadingInstance.close();
+    }
+  }).catch(() => {
+    logger.info("清空操作已被用户取消");
+  });
+};
 
 onMounted(fetchFields);
 </script>
 
 <style scoped>
-.en-code { background: #f0f7ff; color: #409eff; padding: 3px 8px; border-radius: 4px; font-family: monospace; font-weight: bold; }
-.analysis-box { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px dashed #dcdfe6; }
-.box-title { font-size: 12px; color: #909399; margin-bottom: 10px; }
-.missing-actions { margin-top: 8px; }
-.search-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
-.toolbar { display: flex; justify-content: space-between; margin-bottom: 20px; }
-.field-container { padding: 10px; }
+.en-code {
+  background: #f0f7ff;
+  color: #409eff;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-family: 'Consolas', monospace;
+  font-weight: bold;
+}
+
+.analysis-box {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 1px dashed #dcdfe6;
+}
+
+.box-title {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 10px;
+}
+
+.missing-actions {
+  margin-top: 8px;
+}
+
+.search-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.field-container {
+  padding: 10px;
+}
+
+.right .el-button {
+  margin-left: 10px;
+}
 </style>

@@ -5,7 +5,7 @@ import { ElMessage } from 'element-plus';
 
 const request = axios.create({
   baseURL: '/api', // Vite 代理会将 /api 转发到 http://127.0.0.1:3000
-  timeout: 5000
+  timeout: 600000
 });
 
 // 请求拦截器：每秒检查一次本地存储，如果有 Token 则注入 Header
@@ -42,18 +42,19 @@ export const dictionaryApi = {
   signup: (data: AuthPayload) => request.post('/auth/signup', data),
 
   // --- 公共查询 (对应后端 .nest("/api/public", ...)) ---
-  searchField: (q: string) => 
+  searchField: (q: string) =>
     request.get<StandardField[]>(`/public/search?q=${encodeURIComponent(q)}`),
 
   // --- 管理端接口 (对应后端 .nest("/api/admin", ...)) ---
   // 词根管理
-  getRoots: () => request.get<WordRoot[]>('/admin/roots'),
+  getRoots: (page: number, pageSize: number, q?: string) =>
+    request.get<PaginatedResponse<WordRoot>>(`/admin/roots?page=${page}&page_size=${pageSize}&q=${encodeURIComponent(q || '')}`),
   createRoot: (data: WordRoot) => request.post('/admin/roots', data),
   updateRoot: (id: number, data: WordRoot) => request.put(`/admin/roots/${id}`, data),
   deleteRoot: (id: number) => request.delete(`/admin/roots/${id}`),
 
   // 智能建议
-  getSuggest: (q: string) => 
+  getSuggest: (q: string) =>
     request.get<SuggestResponse>(`/admin/suggest?q=${encodeURIComponent(q)}`),
 
   // 标准字段管理
@@ -63,14 +64,26 @@ export const dictionaryApi = {
   deleteField: (id: number) => request.delete(`/admin/fields/${id}`),
   getFieldDetails: (id: number) => request.get<WordRoot[]>(`/admin/fields/${id}`),
 
-    // 用户管理接口
+  // 用户管理接口
   getUsers: () => request.get<any[]>('/admin/users'),
   updateUserRole: (id: number, role: string) => request.put(`/admin/users/${id}`, { role }),
   deleteUser: (id: number) => request.delete(`/admin/users/${id}`),
 
-    // 管理员创建用户
+  // 管理员创建用户
   adminCreateUser: (data: any) => request.post('/admin/users', data),
 
-  getSimilarRoots: (q: string) => 
-  request.get<any[]>(`/public/similar-roots?q=${encodeURIComponent(q)}`),
+  getSimilarRoots: (q: string) =>
+    request.get<any[]>(`/public/similar-roots?q=${encodeURIComponent(q)}`),
+
+  // 添加批量接口
+  batchCreateRoots: (items: WordRoot[]) => request.post('/admin/roots/batch', { items }),
+
+  clearAllRoots: () => request.delete('/admin/roots/clear'),
+
+  clearAllFields: () => request.delete('/admin/fields/clear'),
 };
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+}

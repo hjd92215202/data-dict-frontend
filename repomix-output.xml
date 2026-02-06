@@ -48,14 +48,18 @@ README.md
 src/api/index.ts
 src/App.vue
 src/assets/vue.svg
+src/components/TaskAnalyzer.vue
 src/layouts/AdminLayout.vue
 src/main.ts
 src/router/index.ts
+src/store/task.ts
 src/style.css
 src/types/index.ts
+src/utils/logger.ts
 src/views/Login.vue
 src/views/Signup.vue
 src/views/StandardFieldList.vue
+src/views/TaskManagement.vue
 src/views/UserManagement.vue
 src/views/UserSearch.vue
 src/views/WordRootList.vue
@@ -90,6 +94,97 @@ This section contains the contents of the repository's files.
 
 <file path="src/assets/vue.svg">
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="37.07" height="36" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 198"><path fill="#41B883" d="M204.8 0H256L128 220.8L0 0h97.92L128 51.2L157.44 0h47.36Z"></path><path fill="#41B883" d="m0 0l128 220.8L256 0h-51.2L128 132.48L50.56 0H0Z"></path><path fill="#35495E" d="M50.56 0L128 133.12L204.8 0h-47.36L128 51.2L97.92 0H50.56Z"></path></svg>
+</file>
+
+<file path="src/components/TaskAnalyzer.vue">
+<template>
+  <div class="analyzer-tags">
+    <template v-if="analysis">
+      <el-tag 
+        v-for="(word, index) in analysis.words" 
+        :key="index"
+        :type="word.isMatched ? 'success' : 'danger'"
+        effect="light"
+        class="word-tag"
+      >
+        <!-- 如果匹配成功，显示英文名；如果匹配失败，显示原词 -->
+        {{ word.isMatched ? word.en : word.text }}
+        <span v-if="!word.isMatched">(缺失)</span>
+      </el-tag>
+    </template>
+    <div v-else class="loading-text">分析中...</div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { dictionaryApi } from '../api';
+import { logger } from '../utils/logger';
+
+const props = defineProps<{ cnName: string }>();
+const analysis = ref<any>(null);
+
+onMounted(async () => {
+  try {
+    const { data } = await dictionaryApi.getSuggest(props.cnName);
+    
+    // 修正点：去掉了未使用的 idx 参数
+    const words = data.suggested_en.split('_').map((en: string) => {
+      const isMatched = !en.includes('[');
+      return {
+        // 如果是 [词语] 格式，提取出中间的文本
+        text: isMatched ? "" : en.replace('[', '').replace(']', ''),
+        en: isMatched ? en : '',
+        isMatched
+      };
+    });
+    
+    analysis.value = { words };
+    logger.debug("TaskAnalyzer", `字段 [${props.cnName}] 自动分析完成`, words);
+  } catch (e) {
+    logger.error("TaskAnalyzer", "自动分析失败", e);
+  }
+});
+</script>
+
+<style scoped>
+.analyzer-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.word-tag {
+  font-weight: bold;
+}
+.loading-text {
+  font-size: 12px;
+  color: #909399;
+  font-style: italic;
+}
+</style>
+</file>
+
+<file path="src/store/task.ts">
+import { defineStore } from 'pinia';
+import { dictionaryApi } from '../api';
+import { logger } from '../utils/logger';
+
+export const useTaskStore = defineStore('task', {
+  state: () => ({
+    unprocessedCount: 0,
+  }),
+  actions: {
+    async refreshCount() {
+      try {
+        const { data } = await dictionaryApi.getTaskCount();
+        this.unprocessedCount = data.count;
+        logger.debug("Store:Task", "未处理任务数已更新", data.count);
+      } catch (e) {
+        logger.error("Store:Task", "更新任务数失败", e);
+      }
+    }
+  }
+});
 </file>
 
 <file path="src/style.css">
@@ -174,6 +269,54 @@ button:focus-visible {
 }
 </file>
 
+<file path="src/utils/logger.ts">
+// src/utils/logger.ts
+
+// 使用普通对象代替 enum，满足 erasableSyntaxOnly 要求
+const LogLevel = {
+  DEBUG: 0,
+  INFO: 1,
+  WARN: 2,
+  ERROR: 3
+} as const;
+
+type LogLevelValue = typeof LogLevel[keyof typeof LogLevel];
+
+// 自动判断开发环境或生产环境
+const CURRENT_LEVEL: LogLevelValue = import.meta.env.DEV ? LogLevel.DEBUG : LogLevel.WARN;
+
+const styles = {
+  DEBUG: "color: #909399; font-weight: bold;",
+  INFO: "color: white; background: #409eff; padding: 2px 5px; border-radius: 3px;",
+  WARN: "color: white; background: #e6a23c; padding: 2px 5px; border-radius: 3px;",
+  ERROR: "color: white; background: #f56c6c; padding: 2px 5px; border-radius: 3px;",
+  TAG: "color: #409eff; font-weight: bold; margin-left: 5px;"
+};
+
+export const logger = {
+  debug: (tag: string, msg: string, data: unknown = "") => {
+    if (CURRENT_LEVEL <= LogLevel.DEBUG) {
+      console.log(`%c[DEBUG]%c %c${tag}%c ${msg}`, styles.DEBUG, "", styles.TAG, "", data);
+    }
+  },
+  info: (tag: string, msg: string, data: unknown = "") => {
+    if (CURRENT_LEVEL <= LogLevel.INFO) {
+      console.log(`%c[INFO]%c %c${tag}%c ${msg}`, styles.INFO, "", styles.TAG, "", data);
+    }
+  },
+  warn: (tag: string, msg: string, data: unknown = "") => {
+    if (CURRENT_LEVEL <= LogLevel.WARN) {
+      console.warn(`%c[WARN]%c %c${tag}%c ${msg}`, styles.WARN, "", styles.TAG, "", data);
+    }
+  },
+  error: (tag: string, msg: string, err: unknown = "") => {
+    if (CURRENT_LEVEL <= LogLevel.ERROR) {
+      console.error(`%c[ERROR]%c %c${tag}%c ${msg}`, styles.ERROR, "", styles.TAG, "", err);
+    }
+  }
+};
+</file>
+
 <file path="src/views/Signup.vue">
 <template>
   <div class="signup-container">
@@ -226,6 +369,78 @@ const handleSignup = async () => {
 .signup-card { width: 400px; }
 .link { text-align: center; margin-top: 15px; }
 </style>
+</file>
+
+<file path="src/views/TaskManagement.vue">
+<template>
+  <div class="task-container">
+    <el-card shadow="never">
+      <template #header>
+        <div class="header">
+          <span class="title">用户需求待办列表</span>
+          <el-tag type="danger">{{ tasks.length }} 条待处理</el-tag>
+        </div>
+      </template>
+
+      <el-table :data="tasks" border v-loading="loading">
+        <el-table-column label="申请时间" width="180">
+          <template #default="{ row }">
+            {{ new Date(row.created_at).toLocaleString() }}
+          </template>
+        </el-table-column>
+        
+        <el-table-column label="申请字段名" prop="payload.field_cn_name" width="200" />
+
+        <el-table-column label="智能分词分析 (自动匹配当前词根库)">
+          <template #default="{ row }">
+            <TaskAnalyzer :cn-name="row.payload.field_cn_name" />
+          </template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="150" align="center">
+          <template #default="{ row }">
+            <el-button type="success" size="small" @click="handleDone(row.id)">标记处理</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted } from 'vue';
+import { dictionaryApi } from '../api';
+import { ElMessage } from 'element-plus';
+import TaskAnalyzer from '../components/TaskAnalyzer.vue'; // 提取的分析组件
+import { useTaskStore } from '../store/task';
+
+const taskStore = useTaskStore();
+const tasks = ref<any[]>([]);
+const loading = ref(false);
+
+const fetchTasks = async () => {
+  loading.value = true;
+  try {
+    const { data } = await dictionaryApi.getTasks();
+    tasks.value = data;
+  } finally { loading.value = false; }
+};
+
+const handleDone = async (id: number) => {
+  try {
+    await dictionaryApi.completeTask(id);
+    ElMessage.success("已标记为已处理");
+    
+    // 关键：处理完后，立即让左侧菜单更新数字
+    await taskStore.refreshCount();
+    await fetchTasks(); // 刷新当前列表
+  } catch (e) {
+    ElMessage.error("操作失败");
+  }
+};
+
+onMounted(fetchTasks);
+</script>
 </file>
 
 <file path="src/views/UserManagement.vue">
@@ -612,38 +827,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-repomix-output.xml
-</file>
-
-<file path="package.json">
-{
-  "name": "data-dict-frontend",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@element-plus/icons-vue": "^2.3.2",
-    "axios": "^1.13.2",
-    "element-plus": "^2.13.1",
-    "pinia": "^3.0.4",
-    "vue": "^3.5.24",
-    "vue-router": "^4.6.4",
-    "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "@types/node": "^24.10.1",
-    "@vitejs/plugin-vue": "^6.0.3",
-    "@vue/tsconfig": "^0.8.1",
-    "typescript": "~5.9.3",
-    "vite": "^7.2.4",
-    "vue-tsc": "^3.1.4"
-  }
-}
+*.xml
 </file>
 
 <file path="README.md">
@@ -661,131 +845,6 @@ repomix-output.xml
 进入“智能命名” -> 输入中文 -> 系统调用 jieba 分词。
 全匹配：所有分词都有词根 -> 自动组合英文名 -> 允许点击【正式入库】。
 部分缺失：存在无词根的词段 -> 禁止入库 -> 引导管理员先去【新增词根】。
-</file>
-
-<file path="src/main.ts">
-import { createApp } from 'vue'
-import App from './App.vue'
-import router from './router' // 引入路由
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
-
-const app = createApp(App)
-app.use(router) // 使用路由
-app.use(ElementPlus)
-app.mount('#app')
-</file>
-
-<file path="src/router/index.ts">
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
-
-// 定义路由规则
-const routes: Array<RouteRecordRaw> = [
-  // 1. 公共入口：用户查询门户
-  {
-    path: '/',
-    name: 'UserSearch',
-    component: () => import('../views/UserSearch.vue'),
-    meta: { title: '标准查询门户' }
-  },
-  
-  // 2. 身份认证页
-  {
-    path: '/login',
-    name: 'Login',
-    component: () => import('../views/Login.vue'),
-    meta: { title: '系统登录' }
-  },
-  {
-    path: '/signup',
-    name: 'Signup',
-    component: () => import('../views/Signup.vue'),
-    meta: { title: '用户注册' }
-  },
-
-  // 3. 管理员后台（嵌套路由）
-  {
-    path: '/admin',
-    component: () => import('../layouts/AdminLayout.vue'),
-    redirect: '/admin/fields', // 访问 /admin 时自动跳转到字段管理
-    meta: { requiresAuth: true, requiresAdmin: true }, // 标记需要权限
-    children: [
-      {
-        path: 'fields',
-        name: 'StandardFieldList',
-        component: () => import('../views/StandardFieldList.vue'),
-        meta: { title: '标准字段管理' }
-      },
-      {
-        path: 'roots',
-        name: 'WordRootList',
-        component: () => import('../views/WordRootList.vue'),
-        meta: { title: '标准词根管理' }
-      },
-      {
-        path: 'users',
-        name: 'UserManagement',
-        component: () => import('../views/UserManagement.vue'),
-        meta: { title: '用户权限管理' }
-      }
-    ]
-  },
-
-  // 4. 404 兜底（可选）
-  {
-    path: '/:pathMatch(.*)*',
-    redirect: '/'
-  }
-];
-
-const router = createRouter({
-  history: createWebHistory(),
-  routes
-});
-
-/**
- * 全局路由守卫
- * 负责：页面标题更新、登录拦截、角色权限控制
- */
-router.beforeEach((to, _from, next) => {
-  // 1. 动态更新浏览器页签标题
-  if (to.meta.title) {
-    document.title = `${to.meta.title} - 数据字典系统`;
-  }
-
-  // 2. 获取本地存储的登录状态
-  const token = localStorage.getItem('token');
-  const role = localStorage.getItem('role');
-
-  // 3. 权限判断逻辑
-  if (to.matched.some(record => record.meta.requiresAuth)) {
-    // 检查是否登录
-    if (!token) {
-      next({
-        path: '/login',
-        query: { redirect: to.fullPath } // 登录后跳转回当前页
-      });
-    } 
-    // 检查是否是管理员角色
-    else if (to.matched.some(record => record.meta.requiresAdmin) && role !== 'admin') {
-      // 如果不是管理员，强制踢回普通查询页
-      alert('权限不足：您的账号不是管理员角色，无法进入后台。');
-      next('/');
-    } 
-    else {
-      next(); // 验证通过
-    }
-  } else {
-    // 公共页面，如果已登录且访问 login 页，直接跳后台
-    if (to.path === '/login' && token && role === 'admin') {
-      next('/admin/fields');
-    } else {
-      next();
-    }
-  }
-});
-
-export default router;
 </file>
 
 <file path="src/views/Login.vue">
@@ -895,6 +954,37 @@ const handleLogin = async () => {
 </style>
 </file>
 
+<file path="package.json">
+{
+  "name": "data-dict-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@element-plus/icons-vue": "^2.3.2",
+    "axios": "^1.13.2",
+    "element-plus": "^2.13.1",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.24",
+    "vue-router": "^4.6.4",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@vitejs/plugin-vue": "^6.0.3",
+    "@vue/tsconfig": "^0.8.1",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4",
+    "vue-tsc": "^3.1.4"
+  }
+}
+</file>
+
 <file path="src/App.vue">
 <template>
   <!-- 全局根视图出口 -->
@@ -910,32 +1000,177 @@ body { margin: 0; padding: 0; background-color: #f0f2f5; }
 </style>
 </file>
 
+<file path="src/main.ts">
+import { createApp } from 'vue'
+import App from './App.vue'
+import router from './router' // 引入路由
+import ElementPlus from 'element-plus'
+import 'element-plus/dist/index.css'
+import { createPinia } from 'pinia'
+
+const app = createApp(App)
+app.use(router) // 使用路由
+app.use(ElementPlus)
+app.use(createPinia())
+app.mount('#app')
+</file>
+
+<file path="src/router/index.ts">
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
+
+// 定义路由规则
+const routes: Array<RouteRecordRaw> = [
+  // 1. 公共入口：用户查询门户
+  {
+    path: '/',
+    name: 'UserSearch',
+    component: () => import('../views/UserSearch.vue'),
+    meta: { title: '标准查询门户' }
+  },
+
+  // 2. 身份认证页
+  {
+    path: '/login',
+    name: 'Login',
+    component: () => import('../views/Login.vue'),
+    meta: { title: '系统登录' }
+  },
+  {
+    path: '/signup',
+    name: 'Signup',
+    component: () => import('../views/Signup.vue'),
+    meta: { title: '用户注册' }
+  },
+
+  // 3. 管理员后台（嵌套路由）
+  {
+    path: '/admin',
+    component: () => import('../layouts/AdminLayout.vue'),
+    redirect: '/admin/fields', // 访问 /admin 时自动跳转到字段管理
+    meta: { requiresAuth: true, requiresAdmin: true }, // 标记需要权限
+    children: [
+      {
+        path: 'fields',
+        name: 'StandardFieldList',
+        component: () => import('../views/StandardFieldList.vue'),
+        meta: { title: '标准字段管理' }
+      },
+      {
+        path: 'roots',
+        name: 'WordRootList',
+        component: () => import('../views/WordRootList.vue'),
+        meta: { title: '标准词根管理' }
+      },
+      {
+        path: 'tasks',
+        name: 'TaskManagement',
+        component: () => import('../views/TaskManagement.vue'),
+        meta: { title: '用户需求待办' }
+      },
+      {
+        path: 'users',
+        name: 'UserManagement',
+        component: () => import('../views/UserManagement.vue'),
+        meta: { title: '用户权限管理' }
+      }
+    ]
+  },
+
+  // 4. 404 兜底（可选）
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: '/'
+  }
+];
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes
+});
+
+/**
+ * 全局路由守卫
+ * 负责：页面标题更新、登录拦截、角色权限控制
+ */
+router.beforeEach((to, _from, next) => {
+  // 1. 动态更新浏览器页签标题
+  if (to.meta.title) {
+    document.title = `${to.meta.title} - 数据字典系统`;
+  }
+
+  // 2. 获取本地存储的登录状态
+  const token = localStorage.getItem('token');
+  const role = localStorage.getItem('role');
+
+  // 3. 权限判断逻辑
+  if (to.matched.some(record => record.meta.requiresAuth)) {
+    // 检查是否登录
+    if (!token) {
+      next({
+        path: '/login',
+        query: { redirect: to.fullPath } // 登录后跳转回当前页
+      });
+    }
+    // 检查是否是管理员角色
+    else if (to.matched.some(record => record.meta.requiresAdmin) && role !== 'admin') {
+      // 如果不是管理员，强制踢回普通查询页
+      alert('权限不足：您的账号不是管理员角色，无法进入后台。');
+      next('/');
+    }
+    else {
+      next(); // 验证通过
+    }
+  } else {
+    // 公共页面，如果已登录且访问 login 页，直接跳后台
+    if (to.path === '/login' && token && role === 'admin') {
+      next('/admin/fields');
+    } else {
+      next();
+    }
+  }
+});
+
+export default router;
+</file>
+
 <file path="src/layouts/AdminLayout.vue">
 <template>
   <el-container class="admin-layout">
     <!-- 左侧导航 -->
     <el-aside width="240px" class="aside-menu">
       <div class="logo-box">
-        <el-icon class="logo-icon"><DataLine /></el-icon>
+        <el-icon class="logo-icon">
+          <DataLine />
+        </el-icon>
         <span class="logo-text">字典管理系统</span>
       </div>
 
-      <el-menu
-        :default-active="activePath"
-        class="el-menu-vertical"
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#409EFF"
-        router
-      >
+      <el-menu :default-active="activePath" class="el-menu-vertical" background-color="#304156" text-color="#bfcbd9"
+        active-text-color="#409EFF" router>
+        
         <el-menu-item index="/admin/fields">
           <el-icon><DataAnalysis /></el-icon>
           <span>标准字段管理</span>
         </el-menu-item>
+
         <el-menu-item index="/admin/roots">
           <el-icon><Collection /></el-icon>
           <span>标准词根库</span>
         </el-menu-item>
+
+        <!-- 优化后的菜单项 -->
+        <el-menu-item index="/admin/tasks" class="task-menu-item">
+          <el-icon><Bell /></el-icon>
+          <span class="menu-label">用户需求待办</span>
+          <el-badge 
+            v-if="taskStore.unprocessedCount > 0" 
+            :value="taskStore.unprocessedCount" 
+            :max="99"
+            type="danger" 
+            class="custom-badge"
+          />
+        </el-menu-item>
+
         <el-menu-item index="/admin/users">
           <el-icon><UserFilled /></el-icon>
           <span>用户权限管理</span>
@@ -964,7 +1199,9 @@ body { margin: 0; padding: 0; background-color: #f0f2f5; }
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item divided command="logout" class="logout-item">
-                  <el-icon><SwitchButton /></el-icon>退出登录
+                  <el-icon>
+                    <SwitchButton />
+                  </el-icon>退出登录
                 </el-dropdown-item>
               </el-dropdown-menu>
             </template>
@@ -987,116 +1224,110 @@ body { margin: 0; padding: 0; background-color: #f0f2f5; }
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { 
-  DataAnalysis, 
-  Collection, 
-  DataLine, 
-  UserFilled, 
-  ArrowDown, 
-  SwitchButton 
+import { useTaskStore } from '../store/task';
+import {
+  DataAnalysis,
+  Collection,
+  DataLine,
+  UserFilled,
+  ArrowDown,
+  SwitchButton,
+  Bell
 } from '@element-plus/icons-vue';
 import { ElMessageBox, ElMessage } from 'element-plus';
 
 const route = useRoute();
 const router = useRouter();
+const taskStore = useTaskStore();
 
 const activePath = computed(() => route.path);
 const currentRouteTitle = computed(() => route.meta.title || '后台管理');
 
-// 处理下拉菜单命令
 const handleCommand = (command: string) => {
-  if (command === 'logout') {
-    handleLogout();
-  }
+  if (command === 'logout') handleLogout();
 };
 
-// 退出登录逻辑
 const handleLogout = () => {
-  ElMessageBox.confirm(
-    '确认退出系统管理后台吗？',
-    '提示',
-    {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning',
-    }
-  ).then(() => {
-    // 1. 清除本地存储
+  ElMessageBox.confirm('确认退出系统管理后台吗？', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning',
+  }).then(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('role');
-    
-    // 2. 提示并跳转
     ElMessage.success('已安全退出');
     router.push('/login');
-  }).catch(() => {
-    // 取消退出
-  });
+  }).catch(() => {});
 };
+
+onMounted(() => {
+  taskStore.refreshCount();
+  setInterval(() => {
+    taskStore.refreshCount();
+  }, 30000);
+});
 </script>
 
 <style scoped>
 .admin-layout { height: 100vh; }
 .aside-menu { background-color: #304156; transition: width 0.3s; }
 .logo-box { 
-  height: 60px; 
-  display: flex; 
-  align-items: center; 
-  justify-content: center; 
-  background: #2b2f3a; 
-  color: #fff; 
+  height: 60px; display: flex; align-items: center; justify-content: center; 
+  background: #2b2f3a; color: #fff; 
 }
 .logo-icon { font-size: 24px; color: #409EFF; margin-right: 10px; }
 .logo-text { font-size: 16px; font-weight: bold; }
-
 .el-menu-vertical { border-right: none; }
-
 .admin-header { 
-  background: #fff; 
-  border-bottom: 1px solid #e6e6e6; 
-  display: flex; 
-  align-items: center; 
-  justify-content: space-between;
-  padding: 0 20px;
-  height: 60px;
+  background: #fff; border-bottom: 1px solid #e6e6e6; 
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 20px; height: 60px;
+}
+.user-info { display: flex; align-items: center; cursor: pointer; padding: 5px 8px; border-radius: 4px; }
+.username { font-size: 14px; color: #606266; margin-right: 4px; }
+.logout-item { color: #f56c6c; }
+.admin-main { background-color: #f0f2f5; padding: 20px; }
+
+/* 页面切换动画 */
+.fade-transform-enter-active, .fade-transform-leave-active { transition: all 0.3s; }
+.fade-transform-enter-from { opacity: 0; transform: translateX(-20px); }
+.fade-transform-leave-to { opacity: 0; transform: translateX(20px); }
+
+/* --- 菜单 Badge 深度优化样式 --- */
+
+/* 强制让菜单项内容变为水平对齐 */
+.task-menu-item :deep(.el-menu-item-content) {
+  display: flex !important;
+  align-items: center !important;
+  width: 100%;
 }
 
-.user-info {
+/* 撑开文字，让 Badge 靠右 */
+.menu-label {
+  flex: 1;
+}
+
+/* 核心对齐逻辑：取消 Badge 的绝对定位和偏移 */
+.custom-badge {
   display: flex;
   align-items: center;
-  cursor: pointer;
-  padding: 5px 8px;
-  border-radius: 4px;
-  transition: background 0.3s;
+  margin-right: 15px; /* 距离右侧边缘的间距 */
 }
 
-.user-info:hover {
-  background: #f6f6f6;
-}
-
-.avatar { background: #409eff; margin-right: 8px; }
-.username { font-size: 14px; color: #606266; margin-right: 4px; }
-
-.logout-item { color: #f56c6c; }
-
-.admin-main {
-  background-color: #f0f2f5;
-  padding: 20px;
-}
-
-/* 简单的过渡动画 */
-.fade-transform-enter-active,
-.fade-transform-leave-active {
-  transition: all 0.3s;
-}
-.fade-transform-enter-from {
-  opacity: 0;
-  transform: translateX(-20px);
-}
-.fade-transform-leave-to {
-  opacity: 0;
-  transform: translateX(20px);
+/* 关键：重置 Element Plus 默认的右上角定位 */
+.custom-badge :deep(.el-badge__content) {
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  transform: none !important; /* 彻底取消 translate 偏移 */
+  border: none; /* 去除白边 */
+  height: 18px;
+  line-height: 18px;
+  padding: 0 6px;
+  font-size: 12px;
+  background-color: #f56c6c;
 }
 </style>
 </file>
@@ -1148,12 +1379,17 @@ export interface StandardField {
     <!-- 顶部操作栏 -->
     <div class="toolbar">
       <div class="left">
-        <el-input v-model="searchQuery" placeholder="搜索标准名或同义词..." style="width: 320px" :prefix-icon="Search"
-          clearable />
+        <el-input v-model="searchQuery" placeholder="搜索标准名或同义词..." style="width: 320px;" :prefix-icon="Search" clearable
+          @input="handleSearchLog" />
       </div>
       <div class="right">
+        <!-- 导出按钮 -->
+        <el-button type="success" :icon="Download" @click="handleExport" :disabled="fields.length === 0">
+          导出备份
+        </el-button>
+
         <el-button type="danger" plain :icon="Delete" @click="handleClearAll">
-          清空所有标准
+          清空所有
         </el-button>
 
         <el-divider direction="vertical" />
@@ -1166,7 +1402,7 @@ export interface StandardField {
 
     <!-- 数据表格 -->
     <el-table :data="filteredFields" border v-loading="loading" row-key="id" style="width: 100%">
-      <el-table-column prop="id" label="ID" width="70" />
+      <el-table-column prop="id" label="ID" width="70" align="center" />
       <el-table-column prop="field_cn_name" label="标准中文名" width="180" />
       <el-table-column prop="field_en_name" label="英文标准名" width="220">
         <template #default="{ row }">
@@ -1175,7 +1411,12 @@ export interface StandardField {
       </el-table-column>
       <el-table-column prop="associated_terms" label="同义词/关联词" show-overflow-tooltip />
       <el-table-column prop="data_type" label="数据类型" width="130" />
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column prop="created_at" label="创建时间" width="160">
+        <template #default="{ row }">
+          {{ row.created_at ? new Date(row.created_at).toLocaleString() : '-' }}
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="200" fixed="right" align="center">
         <template #default="{ row }">
           <el-button link type="primary" @click="handleEdit(row)">编辑</el-button>
           <el-button link type="info" @click="showDetail(row)">组成详情</el-button>
@@ -1295,10 +1536,12 @@ export interface StandardField {
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import { Delete,Plus, Search } from '@element-plus/icons-vue';
+import { Delete, Plus, Search, Download } from '@element-plus/icons-vue';
 import { dictionaryApi } from '../api';
 import type { StandardField, WordRoot } from '../types';
 import { ElMessageBox, ElMessage, ElLoading } from 'element-plus';
+import * as XLSX from 'xlsx';
+import { logger } from '../utils/logger';
 
 const formRef = ref();
 const loading = ref(false);
@@ -1334,12 +1577,14 @@ const rules = {
 
 // 1. 获取列表
 const fetchFields = async () => {
+  logger.info("Field:UI", "请求加载标准字段列表数据");
   loading.value = true;
   try {
     const { data } = await dictionaryApi.getFields();
     fields.value = data;
+    logger.debug("Field:Data", "字段列表同步完成", { count: data.length });
   } catch (e) {
-    ElMessage.error('获取列表失败');
+    // 接口拦截器已记录网络日志
   } finally {
     loading.value = false;
   }
@@ -1356,34 +1601,76 @@ const handleAnalyze = () => {
       matchedIds.value = [];
       return;
     }
+    logger.info("Field:Service", "启动词根切分异步分析", { input: form.value.field_cn_name });
     try {
       const { data } = await dictionaryApi.getSuggest(form.value.field_cn_name);
       form.value.field_en_name = data.suggested_en;
       missingWords.value = data.missing_words;
       matchedIds.value = data.matched_ids || [];
-    } catch (e) { console.error(e); }
+      
+      if (data.missing_words.length > 0) {
+        logger.warn("Field:Service", "分析完成：存在未标准化词汇", data.missing_words);
+      } else {
+        logger.info("Field:Service", "分析完成：全词根匹配成功", data.suggested_en);
+      }
+    } catch (e) { 
+      // 错误已由拦截器捕获
+    }
   }, 400);
 };
 
-// 3. 语义搜索
+// 3. 语义搜索词根
 const searchSimilar = async (word: string) => {
+  logger.info("Field:Service", "触发语义找词请求", { word });
   searchingWord.value = word;
   try {
     const { data } = await dictionaryApi.getSimilarRoots(word);
     similarRoots.value = data;
     similarDialogVisible.value = true;
-  } catch (e) { ElMessage.error("检索失败"); }
+    logger.debug("Field:Service", "语义召回数据完毕", data);
+  } catch (e) {
+    ElMessage.error("检索失败");
+  }
 };
 
-// 4. 保存
+// 4. Excel 导出逻辑
+const handleExport = () => {
+  logger.info("Field:Action", "触发导出 Excel 备份任务", { visibleCount: filteredFields.value.length });
+  try {
+    const exportData = filteredFields.value.map((f, index) => ({
+      "序号": index + 1,
+      "标准中文名": f.field_cn_name,
+      "标准英文名": f.field_en_name,
+      "数据类型": f.data_type,
+      "关联同义词": f.associated_terms || '-',
+      "发布时间": f.created_at ? new Date(f.created_at).toLocaleString() : '-'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "数据标准清单");
+
+    const timeMark = new Date().getTime();
+    XLSX.writeFile(wb, `标准字段导出_${timeMark}.xlsx`);
+    logger.info("Field:Action", "Excel 文件生成成功并下发下载指令");
+    ElMessage.success("导出成功");
+  } catch (err) {
+    logger.error("Field:Action", "导出组件运行时异常", err);
+    ElMessage.error("导出异常，请查看控制台");
+  }
+};
+
+// 5. 保存
 const submitForm = async () => {
   if (!formRef.value) return;
   await formRef.value.validate(async (valid: boolean) => {
     if (valid) {
+      const isEdit = !!form.value.id;
+      logger.info("Field:Action", isEdit ? "提交字段更新请求" : "提交新增字段请求", form.value);
       submitting.value = true;
       try {
         const payload = { ...form.value, composition_ids: matchedIds.value };
-        if (form.value.id) {
+        if (isEdit) {
           await dictionaryApi.updateField(form.value.id, payload);
         } else {
           await dictionaryApi.createField(payload);
@@ -1391,37 +1678,59 @@ const submitForm = async () => {
         ElMessage.success('保存成功');
         dialogVisible.value = false;
         fetchFields();
-      } catch (e) { ElMessage.error('保存失败'); } finally { submitting.value = false; }
+      } catch (e) {
+        // 错误已由拦截器记录
+      } finally { submitting.value = false; }
     }
   });
 };
 
-// 5. 删除
+// 6. 删除
 const handleDelete = async (id: number) => {
+  logger.warn("Field:Action", `执行物理删除指令，目标ID: ${id}`);
   try {
     await dictionaryApi.deleteField(id);
     ElMessage.success('已删除');
     fetchFields();
-  } catch (e) { ElMessage.error('删除失败'); }
+  } catch (e) {
+    // 错误已处理
+  }
 };
 
-// 6. 详情
+// 7. 详情
 const showDetail = async (row: StandardField) => {
+  logger.debug("Field:UI", "打开字段引用链抽屉", { fieldId: row.id });
   selectedField.value = row;
   detailRoots.value = [];
   drawerVisible.value = true;
   try {
     const { data } = await dictionaryApi.getFieldDetails(row.id!);
     detailRoots.value = data;
-  } catch (e) { ElMessage.error("加载失败"); }
+    logger.info("Field:Service", "字段组成链路解析成功", { count: data.length });
+  } catch (e) {
+    ElMessage.error("详情加载失败");
+  }
 };
 
-const openAddDialog = () => { resetForm(); dialogVisible.value = true; };
+const handleSearchLog = () => {
+  if (searchQuery.value) {
+    logger.debug("Field:UI", "执行列表本地过滤搜索", { query: searchQuery.value });
+  }
+};
+
+const openAddDialog = () => { 
+  logger.debug("Field:UI", "打开新增字段对话框");
+  resetForm(); 
+  dialogVisible.value = true; 
+};
+
 const handleEdit = (row: StandardField) => {
+  logger.debug("Field:UI", "进入字段编辑模式", { id: row.id });
   form.value = { ...row };
   handleAnalyze();
   dialogVisible.value = true;
 };
+
 const resetForm = () => {
   form.value = { id: undefined, field_cn_name: '', field_en_name: '', associated_terms: '', data_type: 'VARCHAR(100)', composition_ids: [] };
   missingWords.value = [];
@@ -1431,29 +1740,33 @@ const resetForm = () => {
 const filteredFields = computed(() => {
   const q = searchQuery.value.toLowerCase().trim();
   if (!q) return fields.value;
-  return fields.value.filter(f => f.field_cn_name.includes(q) || f.field_en_name.includes(q));
+  return fields.value.filter(f => 
+    f.field_cn_name.toLowerCase().includes(q) || 
+    f.field_en_name.toLowerCase().includes(q)
+  );
 });
+
 const handleClearAll = () => {
   ElMessageBox.confirm(
-    '警告：此操作将永久清空标准库和向量索引，用户将无法搜索到任何字段！是否继续？',
-    '严正警告',
-    {
-      confirmButtonText: '确定清空',
-      cancelButtonText: '取消',
-      type: 'error',
-    }
+    '警告：此操作将永久清空标准库和向量索引，用户将无法搜索到任何字段！',
+    '高危操作确认',
+    { confirmButtonText: '确定清空', cancelButtonText: '取消', type: 'error' }
   ).then(async () => {
-    const loading = ElLoading.service({ text: '正在同步清理索引...' });
+    logger.warn("Field:Action", "正在执行一键全量清空（TRUNCATE/Filter:ALL）");
+    const loadingInstance = ElLoading.service({ text: '正在清理索引与数据库...' });
     try {
       const res = await dictionaryApi.clearAllFields();
+      logger.info("Field:Action", "标准字段库全量清理任务已完成", res.data);
       ElMessage.success(res.data);
-      await fetchFields(); // 刷新列表
+      await fetchFields();
     } catch (e) {
-      ElMessage.error("清理失败");
+      // 错误处理
     } finally {
-      loading.close();
+      loadingInstance.close();
     }
-  }).catch(() => {});
+  }).catch(() => {
+    logger.debug("Field:UI", "用户取消了清空操作");
+  });
 };
 
 onMounted(fetchFields);
@@ -1465,7 +1778,7 @@ onMounted(fetchFields);
   color: #409eff;
   padding: 3px 8px;
   border-radius: 4px;
-  font-family: monospace;
+  font-family: 'Consolas', monospace;
   font-weight: bold;
 }
 
@@ -1503,6 +1816,10 @@ onMounted(fetchFields);
 .field-container {
   padding: 10px;
 }
+
+.right .el-button {
+  margin-left: 10px;
+}
 </style>
 </file>
 
@@ -1538,7 +1855,7 @@ onMounted(fetchFields);
       </div>
     </div>
 
-    <!-- 数据表格：直接绑定 roots 数组 -->
+    <!-- 数据表格 -->
     <el-table :data="roots" border v-loading="loading" style="width: 100%">
       <el-table-column prop="id" label="ID" width="80" align="center" />
       <el-table-column prop="cn_name" label="中文名称" width="150" />
@@ -1576,7 +1893,7 @@ onMounted(fetchFields);
     </div>
 
     <!-- 弹窗部分 -->
-    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑词根' : '新增词根'" width="550px">
+    <el-dialog v-model="dialogVisible" :title="form.id ? '编辑词根' : '新增词根'" width="550px" @closed="resetForm">
       <el-form :model="form" label-width="100px" ref="formRef" :rules="rules" label-position="left">
         <el-form-item label="中文名称" prop="cn_name">
           <el-input v-model="form.cn_name" placeholder="如：金额" />
@@ -1609,6 +1926,7 @@ import { dictionaryApi } from '../api';
 import type { WordRoot } from '../types';
 import { ElMessageBox, ElMessage, ElLoading } from 'element-plus';
 import * as XLSX from 'xlsx';
+import { logger } from '../utils/logger';
 
 // --- 状态变量 ---
 const loading = ref(false);
@@ -1636,26 +1954,22 @@ const rules = {
   en_abbr: [{ required: true, message: '请输入英文缩写', trigger: 'blur' }],
 };
 
-// --- 核心加载逻辑 (分页 + 搜索) ---
+// --- 核心加载逻辑 ---
 const fetchRoots = async () => {
+  logger.info("Root:UI", "请求加载词根分页列表", { page: currentPage.value, size: pageSize.value, q: searchQuery.value });
   loading.value = true;
   try {
-    // 调用后端分页接口
-    const { data } = await dictionaryApi.getRoots(
-      currentPage.value,
-      pageSize.value,
-      searchQuery.value
-    );
+    const { data } = await dictionaryApi.getRoots(currentPage.value, pageSize.value, searchQuery.value);
     roots.value = data.items;
     total.value = data.total;
+    logger.debug("Root:Data", "词根数据同步完成", { count: data.items.length, total: data.total });
   } catch (error) {
-    ElMessage.error('加载词根库失败');
+    // 拦截器已处理日志
   } finally {
     loading.value = false;
   }
 };
 
-// 分页切换处理
 const handleCurrentChange = (val: number) => {
   currentPage.value = val;
   fetchRoots();
@@ -1667,55 +1981,46 @@ const handleSizeChange = (val: number) => {
   fetchRoots();
 };
 
-// 搜索处理 (带防抖)
 let timer: any = null;
 const handleSearch = () => {
   if (timer) clearTimeout(timer);
   timer = setTimeout(() => {
-    currentPage.value = 1; // 搜索时重置回第一页
+    logger.info("Root:UI", "触发服务端搜索", searchQuery.value);
+    currentPage.value = 1;
     fetchRoots();
   }, 400);
 };
 
-// --- 一键清空 ---
+// --- 危险操作：一键清空 ---
 const handleClearAll = () => {
   ElMessageBox.confirm(
-    '此操作将永久删除数据库和向量库中的【所有】词根！建议操作前先执行导出备份。是否继续？',
-    '极其危险的操作提示',
-    {
-      confirmButtonText: '确定清空',
-      cancelButtonText: '取消',
-      type: 'error',
-      confirmButtonClass: 'el-button--danger'
-    }
+    '此操作将永久清空数据库和向量库中的【所有】词根！建议操作前先执行导出备份。',
+    '高危清理指令',
+    { confirmButtonText: '确认清空', cancelButtonText: '取消', type: 'error', confirmButtonClass: 'el-button--danger' }
   ).then(async () => {
-    const loadingInstance = ElLoading.service({ text: '数据清理中...' });
+    logger.warn("Root:Action", "管理员执行全量清空指令");
+    const loadingInstance = ElLoading.service({ text: '正在清理全局索引...' });
     try {
       const res = await dictionaryApi.clearAllRoots();
+      logger.info("Root:Action", "清空任务成功完成", res.data);
       ElMessage.success(res.data);
       currentPage.value = 1;
       await fetchRoots();
     } catch (error) {
-      ElMessage.error("清理操作失败");
+      // 错误已拦截
     } finally {
       loadingInstance.close();
     }
-  }).catch(() => { });
+  }).catch(() => { logger.debug("Root:UI", "用户取消了清空操作"); });
 };
 
-// --- 导出逻辑 (导出全部数据) ---
+// --- 导出逻辑 ---
 const handleExport = async () => {
-  const loadingInstance = ElLoading.service({ text: '正在准备全量导出数据...' });
+  logger.info("Root:Action", "开始全量导出词根数据");
+  const loadingInstance = ElLoading.service({ text: '正在扫描全表数据并生成文件...' });
   try {
-    // 导出通常需要全量，这里请求一个足够大的 pageSize 或者专门的导出接口
-    // 这里假设 getRoots 支持获取大量数据
     const { data } = await dictionaryApi.getRoots(1, 10000, searchQuery.value);
-
-    if (data.items.length === 0) {
-      ElMessage.warning("没有可导出的数据");
-      return;
-    }
-
+    
     const exportData = data.items.map((r, index) => ({
       "序号": index + 1,
       "中文名称": r.cn_name,
@@ -1728,10 +2033,11 @@ const handleExport = async () => {
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "标准词根库");
-    XLSX.writeFile(wb, `标准词根库_${new Date().getTime()}.xlsx`);
+    XLSX.writeFile(wb, `词根导出_${new Date().getTime()}.xlsx`);
+    logger.info("Root:Action", "Excel 导出成功");
     ElMessage.success("全量导出成功");
   } catch (e) {
-    ElMessage.error("导出失败");
+    logger.error("Root:Action", "导出任务崩溃", e);
   } finally {
     loadingInstance.close();
   }
@@ -1739,6 +2045,7 @@ const handleExport = async () => {
 
 // --- 导入逻辑 ---
 const handleImport = (file: any) => {
+  logger.info("Root:Action", "准备导入 Excel 文件", file.name);
   const reader = new FileReader();
   reader.onload = async (e: any) => {
     try {
@@ -1750,6 +2057,8 @@ const handleImport = (file: any) => {
       if (!worksheet) return;
 
       const json: any[] = XLSX.utils.sheet_to_json(worksheet);
+      logger.debug("Root:Data", "Excel 解析原始行数", json.length);
+
       const formattedData = json.map((item: any) => ({
         cn_name: String(item["中文名称"] || "").trim(),
         en_full_name: String(item["英文全称"] || "").trim(),
@@ -1757,6 +2066,8 @@ const handleImport = (file: any) => {
         associated_terms: String(item["同义词"] || "").trim(),
         remark: String(item["备注"] || "").trim()
       })).filter(item => item.cn_name && item.en_abbr);
+
+      logger.info("Root:Action", "数据格式化完成，准备推送后端", { validRows: formattedData.length });
 
       if (formattedData.length === 0) {
         ElMessage.error("未找到有效数据");
@@ -1766,78 +2077,74 @@ const handleImport = (file: any) => {
       const loadingInstance = ElLoading.service({ text: '同步数据并构建向量索引中...' });
       try {
         const res = await dictionaryApi.batchCreateRoots(formattedData);
-        const result = res.data; // 这里现在是一个对象了
+        const result = res.data;
+        logger.info("Root:Service", "批量导入接口结果回执", result);
 
         if (result.failure_count > 0) {
-          // 使用 ElMessageBox 展示详细的失败列表
           ElMessageBox.confirm(
-            `导入完成。成功: ${result.success_count} 条，失败: ${result.failure_count} 条。是否查看失败原因？`,
-            '导入详情',
-            { confirmButtonText: '查看原因', cancelButtonText: '关闭', type: 'warning' }
+            `导入报告：成功 ${result.success_count}，失败 ${result.failure_count}。是否下载失败原因列表？`,
+            '批量导入结果',
+            { confirmButtonText: '查看详情', cancelButtonText: '关闭', type: 'warning' }
           ).then(() => {
             ElMessageBox.alert(
-              `<div style="max-height:300px;overflow:auto">${result.errors.join('<br/>')}</div>`,
+              `<div style="max-height:300px;overflow:auto;color:#f56c6c">${result.errors.join('<br/>')}</div>`,
               '失败原因清单',
               { dangerouslyUseHTMLString: true }
             );
           });
         } else {
-          ElMessage.success(`全部导入成功，共 ${result.success_count} 条`);
+          ElMessage.success(`导入成功，共 ${result.success_count} 条`);
         }
+        currentPage.value = 1;
         await fetchRoots();
       } catch (err: any) {
-        // --- 关键改进：暴露真实报错内容 ---
-        console.error("Full Error Object:", err);
-        const backendMsg = err.response?.data;
-        const errorDetail = typeof backendMsg === 'string' ? backendMsg : JSON.stringify(backendMsg);
-        ElMessage({
-          message: `后端响应异常: ${errorDetail || err.message}`,
-          type: 'error',
-          duration: 8000,
-          showClose: true
-        });
+        logger.error("Root:Service", "批量导入网络异常", err);
       } finally {
         loadingInstance.close();
       }
     } catch (err) {
-      ElMessage.error("导入异常");
+      logger.error("Root:Action", "本地文件解析异常", err);
     }
   };
   reader.readAsArrayBuffer(file.raw);
 };
 
-// --- 增删改 ---
-const openAddDialog = () => {
+// --- CRUD 操作 ---
+const openAddDialog = () => { 
+  logger.debug("Root:UI", "打开新增词根对话框");
   form.value = { cn_name: '', en_abbr: '', en_full_name: '', associated_terms: '', remark: '' };
-  dialogVisible.value = true;
+  dialogVisible.value = true; 
 };
 
 const handleEdit = (row: WordRoot) => {
+  logger.debug("Root:UI", "进入编辑模式", { id: row.id });
   form.value = { ...row };
   dialogVisible.value = true;
 };
 
 const handleDelete = async (id: number) => {
+  logger.warn("Root:Action", `执行删除操作，ID: ${id}`);
   try {
     await dictionaryApi.deleteRoot(id);
     ElMessage.success('已删除');
     await fetchRoots();
-  } catch (e) { ElMessage.error('删除失败'); }
+  } catch (e) { /* 处理已由拦截器记录 */ }
 };
 
 const saveRoot = async () => {
   if (!formRef.value) return;
   await formRef.value.validate(async (valid: boolean) => {
     if (valid) {
+      const isEdit = !!form.value.id;
+      logger.info("Root:Action", isEdit ? "提交更新请求" : "提交新增请求", form.value);
       submitting.value = true;
       try {
-        if (form.value.id) {
-          await dictionaryApi.updateRoot(form.value.id, form.value);
-          ElMessage.success('修改成功');
+        if (isEdit) {
+          await dictionaryApi.updateRoot(form.value.id!, form.value);
         } else {
           await dictionaryApi.createRoot(form.value);
-          ElMessage.success('新增成功');
         }
+        ElMessage.success('保存成功');
         dialogVisible.value = false;
         await fetchRoots();
       } finally {
@@ -1847,42 +2154,21 @@ const saveRoot = async () => {
   });
 };
 
+const resetForm = () => {
+  logger.debug("Root:UI", "重置词根表单数据");
+  form.value = { cn_name: '', en_abbr: '', en_full_name: '', associated_terms: '', remark: '' };
+};
+
 onMounted(fetchRoots);
 </script>
 
 <style scoped>
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.en-code {
-  background: #f0f7ff;
-  color: #409eff;
-  padding: 3px 6px;
-  border-radius: 4px;
-  font-family: 'Consolas', monospace;
-  font-weight: bold;
-}
-
-.root-container {
-  padding: 10px;
-}
-
-.pagination-container {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-:deep(.el-upload) {
-  display: inline-block;
-}
-
-.right .el-button {
-  margin-left: 8px;
-}
+.toolbar { display: flex; justify-content: space-between; margin-bottom: 20px; }
+.en-code { background: #f0f7ff; color: #409eff; padding: 3px 6px; border-radius: 4px; font-family: 'Consolas', monospace; font-weight: bold; }
+.root-container { padding: 10px; }
+.pagination-container { margin-top: 20px; display: flex; justify-content: flex-end; }
+:deep(.el-upload) { display: inline-block; }
+.right .el-button { margin-left: 8px; }
 </style>
 </file>
 
@@ -1895,35 +2181,59 @@ onMounted(fetchRoots);
     </div>
 
     <div class="search-main">
-      <el-input v-model="queryText" placeholder="输入中文名称 (如: 支付金额)" size="large" @keyup.enter="doSearch">
+      <el-input 
+        v-model="queryText" 
+        placeholder="输入中文名称 (如: 支付金额)" 
+        size="large" 
+        clearable
+        @keyup.enter="doSearch"
+      >
         <template #append>
-          <el-button :icon="Search" @click="doSearch">搜索</el-button>
+          <el-button :icon="Search" @click="doSearch">搜索标准</el-button>
         </template>
       </el-input>
 
       <div class="result-list" v-loading="loading">
-        <!-- 1. 标准字段结果 (含语义匹配评分) -->
+        <!-- 情况 A: 找到了结果 (无论是精准匹配还是语义推荐) -->
         <template v-if="results.length > 0">
-          <div class="section-tag">找到以下标准定义：</div>
-          <el-card v-for="item in results" :key="item.id" class="result-item">
+          <div class="section-tag">
+            <el-icon><CircleCheck /></el-icon> 匹配到以下相关标准：
+          </div>
+          
+          <el-card v-for="item in results" :key="item.id" class="result-item" shadow="hover">
             <div class="item-content">
               <div class="info">
                 <div class="cn-row">
                   <span class="cn-name">{{ item.field_cn_name }}</span>
-                  <el-tag v-if="item.score" size="small" type="warning" effect="plain" class="score-tag">
-                    语义匹配 {{ (item.score * 100).toFixed(0) }}%
+                  <!-- 只有通过向量搜索出来的推荐结果才显示匹配度 -->
+                  <el-tag v-if="item.score" size="small" type="warning" effect="light" class="score-tag">
+                    推荐匹配 {{ (item.score * 100).toFixed(0) }}%
+                  </el-tag>
+                  <el-tag v-else size="small" type="success" effect="plain" class="score-tag">
+                    精准匹配
                   </el-tag>
                 </div>
                 <div class="en-name">{{ item.field_en_name }}</div>
               </div>
               <div class="meta">
-                <el-tag size="small">{{ item.data_type }}</el-tag>
+                <el-tag size="small" info>{{ item.data_type }}</el-tag>
               </div>
             </div>
           </el-card>
+
+          <!-- 核心改进：即使有结果，也允许用户发起“这不是我想要的”申请 -->
+          <div class="not-found-footer">
+            <span>没找到想要的精准标准？</span>
+            <el-button type="primary" link @click="requestNew">提交新增申请</el-button>
+          </div>
         </template>
-        <el-empty v-else-if="hasSearched && results.length === 0" description="暂无相关标准">
-          <el-button type="primary" plain @click="requestNew">申请新增标准</el-button>
+
+        <!-- 情况 B: 搜索过但完全没有任何结果 -->
+        <el-empty v-else-if="hasSearched && results.length === 0" description="未找到相关标准定义">
+          <template #default>
+            <p class="empty-tip">该字段可能尚未录入标准库，您可以向管理员发起申请</p>
+            <el-button type="primary" @click="requestNew">立即申请新增标准</el-button>
+          </template>
         </el-empty>
       </div>
     </div>
@@ -1932,9 +2242,10 @@ onMounted(fetchRoots);
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { Search } from '@element-plus/icons-vue';
+import { Search, CircleCheck } from '@element-plus/icons-vue';
 import { dictionaryApi } from '../api';
 import { ElMessage } from 'element-plus';
+import { logger } from '../utils/logger';
 
 const queryText = ref('');
 const loading = ref(false);
@@ -1942,29 +2253,51 @@ const results = ref<any[]>([]);
 const hasSearched = ref(false);
 
 const doSearch = async () => {
-  if (!queryText.value) return;
+  const q = queryText.value.trim();
+  if (!q) return;
+
+  logger.info("SearchPortal", "执行标准查询", q);
   loading.value = true;
   results.value = [];
 
   try {
-    // A. 先查标准字段 (Postgres ILIKE)
-    const { data: fieldData } = await dictionaryApi.searchField(queryText.value);
-    results.value = fieldData;
+    const { data } = await dictionaryApi.searchField(q);
+    results.value = data;
     hasSearched.value = true;
+    logger.debug("SearchPortal", `查询结束，召回 ${data.length} 条结果`);
+  } catch (e) {
+    logger.error("SearchPortal", "搜索接口异常", e);
   } finally {
     loading.value = false;
   }
 };
 
-const requestNew = () => {
-  ElMessage.success(`已记录申请: ${queryText.value}，请联系管理员处理`);
+const requestNew = async () => {
+  const q = queryText.value.trim();
+  if (!q) {
+    ElMessage.warning("请先在搜索框输入您想申请的字段名称");
+    return;
+  }
+
+  try {
+    logger.info("SearchPortal", "提交新增申请", q);
+    await dictionaryApi.submitRequest(q);
+    ElMessage({
+      message: `申请已提交: 【${q}】，管理员处理后将通知您`,
+      type: 'success',
+      duration: 5000
+    });
+  } catch (e) {
+    logger.error("SearchPortal", "提交申请失败", e);
+  }
 };
 </script>
 
 <style scoped>
 .user-search-container {
-  max-width: 700px;
+  max-width: 800px;
   margin: 60px auto;
+  padding: 0 20px;
 }
 
 .search-header {
@@ -1972,18 +2305,29 @@ const requestNew = () => {
   margin-bottom: 40px;
 }
 
+.search-header h1 {
+  font-size: 28px;
+  color: #303133;
+}
+
+.search-header p {
+  color: #909399;
+  margin-top: 10px;
+}
+
 .result-list {
-  margin-top: 30px;
+  margin-top: 40px;
 }
 
 .result-item {
-  margin-bottom: 15px;
-  transition: transform 0.2s;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  transition: all 0.3s;
 }
 
 .result-item:hover {
   transform: translateY(-2px);
-  border-color: #409eff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
 .item-content {
@@ -1992,74 +2336,51 @@ const requestNew = () => {
   align-items: center;
 }
 
-.cn-name {
-  font-size: 18px;
-  font-weight: bold;
-  margin-bottom: 4px;
-}
-
-.en-name {
-  font-family: 'Consolas', monospace;
-  color: #409eff;
-  font-weight: bold;
-}
-
-.meta {
-  text-align: right;
-}
-
-.time {
-  font-size: 12px;
-  color: #999;
-  margin-top: 8px;
-}
-
-.user-nav {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-}
-
-.section-tag {
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 10px;
-}
-
 .cn-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.cn-name {
+  font-size: 18px;
+  font-weight: bold;
+  color: #303133;
+}
+
+.en-name {
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #409eff;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .score-tag {
-  font-size: 10px;
+  font-weight: normal;
 }
 
-.root-mini-card {
-  margin-top: 10px;
-  background: #fdfdfd;
-}
-
-.root-cn {
-  font-weight: bold;
-  color: #409EFF;
-}
-
-.root-en {
-  font-family: monospace;
-  color: #67C23A;
-}
-
-.root-full {
-  font-size: 12px;
-  color: #999;
-  margin-top: 5px;
-}
-
-.flex-between {
+.section-tag {
+  font-size: 14px;
+  color: #606266;
+  margin-bottom: 15px;
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.not-found-footer {
+  margin-top: 30px;
+  padding: 20px;
+  text-align: center;
+  border-top: 1px dashed #dcdfe6;
+  color: #909399;
+  font-size: 14px;
+}
+
+.empty-tip {
+  color: #909399;
+  margin-bottom: 20px;
 }
 </style>
 </file>
@@ -2069,6 +2390,7 @@ import axios from 'axios';
 import router from '../router';
 import type { WordRoot, SuggestResponse, StandardField, AuthPayload, AuthResponse } from '../types';
 import { ElMessage } from 'element-plus';
+import { logger } from '../utils/logger';
 
 const request = axios.create({
   baseURL: '/api', // Vite 代理会将 /api 转发到 http://127.0.0.1:3000
@@ -2081,13 +2403,28 @@ request.interceptors.request.use((config) => {
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  logger.debug("Network", `>>> 发起请求 [${config.method?.toUpperCase()}] ${config.url}`, config.params || config.data);
+
   return config;
 });
 
 // 响应拦截器：统一处理 401/403 错误
 request.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    logger.debug("Network", `<<< 收到响应 [${res.status}] ${res.config.url}`, res.data);
+    return res;
+  },
   (err) => {
+
+    const status = err.response?.status;
+    const url = err.config?.url;
+
+    logger.error("Network", `!!! 请求异常 [${status || 'TIMEOUT'}] ${url}`, {
+      message: err.message,
+      data: err.response?.data
+    });
+
     if (err.response) {
       if (err.response.status === 401 || err.response.status === 403) {
         // 只要是权限报错，不管是过期还是越权，一律视作“当前会话失效”
@@ -2148,6 +2485,12 @@ export const dictionaryApi = {
   clearAllRoots: () => request.delete('/admin/roots/clear'),
 
   clearAllFields: () => request.delete('/admin/fields/clear'),
+
+  submitRequest: (cnName: string) => request.post('/public/tasks', { field_cn_name: cnName }),
+
+  getTasks: () => request.get<any[]>('/admin/tasks'),
+  completeTask: (id: number) => request.put(`/admin/tasks/${id}`),
+  getTaskCount: () => request.get<{ count: number }>('/admin/tasks/count'),
 };
 
 export interface PaginatedResponse<T> {

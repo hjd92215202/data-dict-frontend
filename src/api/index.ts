@@ -97,6 +97,12 @@ export const dictionaryApi = {
   clearAllRoots: () => request.delete('/admin/roots/clear'),
 
   clearAllFields: () => request.delete('/admin/fields/clear'),
+
+  submitRequest: (cnName: string) => request.post('/public/tasks', { field_cn_name: cnName }),
+
+  getTasks: () => request.get<any[]>('/admin/tasks'),
+  completeTask: (id: number) => request.put(`/admin/tasks/${id}`),
+  getTaskCount: () => request.get<{ count: number }>('/admin/tasks/count'),
 };
 
 export interface PaginatedResponse<T> {

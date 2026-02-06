@@ -9,7 +9,7 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import('../views/UserSearch.vue'),
     meta: { title: '标准查询门户' }
   },
-  
+
   // 2. 身份认证页
   {
     path: '/login',
@@ -42,6 +42,12 @@ const routes: Array<RouteRecordRaw> = [
         name: 'WordRootList',
         component: () => import('../views/WordRootList.vue'),
         meta: { title: '标准词根管理' }
+      },
+      {
+        path: 'tasks',
+        name: 'TaskManagement',
+        component: () => import('../views/TaskManagement.vue'),
+        meta: { title: '用户需求待办' }
       },
       {
         path: 'users',
@@ -86,13 +92,13 @@ router.beforeEach((to, _from, next) => {
         path: '/login',
         query: { redirect: to.fullPath } // 登录后跳转回当前页
       });
-    } 
+    }
     // 检查是否是管理员角色
     else if (to.matched.some(record => record.meta.requiresAdmin) && role !== 'admin') {
       // 如果不是管理员，强制踢回普通查询页
       alert('权限不足：您的账号不是管理员角色，无法进入后台。');
       next('/');
-    } 
+    }
     else {
       next(); // 验证通过
     }

@@ -7,7 +7,6 @@
           @input="handleSearchLog" />
       </div>
       <div class="right">
-        <!-- 导出按钮 -->
         <el-button type="success" :icon="Download" @click="handleExport" :disabled="fields.length === 0">
           导出备份
         </el-button>
@@ -54,46 +53,55 @@
     </el-table>
 
     <!-- 新增/编辑弹窗 -->
-    <el-dialog v-model="dialogVisible" :title="form.id ? '修改标准字段' : '新增标准字段'" width="600px" @closed="resetForm">
+    <el-dialog v-model="dialogVisible" :title="form.id ? '修改标准字段' : '新增标准字段'" width="750px" @closed="resetForm">
       <el-form :model="form" label-width="110px" ref="formRef" :rules="rules">
         <el-form-item label="标准中文名" prop="field_cn_name">
-          <el-input v-model="form.field_cn_name" placeholder="如：收货人手机号" @input="handleAnalyze" />
+          <el-input v-model="form.field_cn_name" placeholder="如：客户支付状态" @input="handleAnalyze" clearable />
         </el-form-item>
 
+        <!-- 核心优化：交互式词根校验区 -->
         <div class="analysis-box">
-          <div class="box-title">词根组合校验结果：</div>
+          <div class="box-title">词根选择与校验矩阵：</div>
 
-          <div v-if="missingWords.length > 0" class="status-error">
-            <el-alert type="error" :closable="false">
-              <template #title>
-                无法生成：词项 [ {{ missingWords.join(', ') }} ] 未标准化
-              </template>
-              <div class="missing-actions">
-                <p>请先在“词根管理”中录入以上词汇。</p>
-                <div class="search-btns">
-                  <el-button v-for="word in missingWords" :key="word" size="small" type="primary" plain :icon="Search"
-                    @click="searchSimilar(word)">
-                    找词: {{ word }}
-                  </el-button>
-                </div>
+          <div v-if="analysisSegments.length > 0" class="segment-chain">
+            <div v-for="(seg, idx) in analysisSegments" :key="idx" class="segment-item" 
+                 :class="{ 'is-missing': seg.candidates.length === 0 }">
+              <div class="original-word">{{ seg.word }}</div>
+              
+              <!-- 候选列表 -->
+              <div v-if="seg.candidates.length > 0" class="candidate-list">
+                <el-check-tag
+                  v-for="cand in seg.candidates"
+                  :key="cand.id"
+                  :checked="selectedRootIds[idx] === cand.id"
+                  @change="selectRoot(idx, cand)"
+                  class="root-tag"
+                >
+                  {{ cand.en_abbr }}
+                  <span class="cand-cn">({{ cand.cn_name }})</span>
+                </el-check-tag>
               </div>
-            </el-alert>
+
+              <!-- 缺失状态 -->
+              <div v-else class="missing-status">
+                <el-tag type="danger" size="small">未建词根</el-tag>
+                <el-button type="primary" link :icon="Search" @click="searchSimilar(seg.word)">找词</el-button>
+              </div>
+            </div>
           </div>
 
-          <div v-else-if="form.field_en_name" class="status-success">
-            <el-alert type="success" :closable="false" show-icon>
-              <template #title>
-                验证通过：生成的英文名为 <b>{{ form.field_en_name }}</b>
-              </template>
-              <div class="root-chain">
-                关联词根ID链:
-                <el-tag v-for="id in matchedIds" :key="id" size="small" class="id-tag">
-                  {{ id }}
-                </el-tag>
-              </div>
-            </el-alert>
+          <div v-else class="status-empty">等待输入中文名进行智能解析...</div>
+
+          <!-- 生成预览 -->
+          <div class="en-preview-bar" v-if="analysisSegments.length > 0">
+            <div class="preview-label">实时生成英文名：</div>
+            <div class="preview-value">
+              <span v-for="(part, i) in previewParts" :key="i">
+                <b :class="{ 'text-danger': part === '??' }">{{ part }}</b>
+                <i v-if="i < previewParts.length - 1">_</i>
+              </span>
+            </div>
           </div>
-          <div v-else class="status-empty">等待输入中文名进行解析...</div>
         </div>
 
         <el-form-item label="同义词" prop="associated_terms">
@@ -114,8 +122,8 @@
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" @click="submitForm" :loading="submitting"
-          :disabled="missingWords.length > 0 || !form.field_en_name">
-          确认提交
+          :disabled="!isSelectionComplete">
+          确认入库
         </el-button>
       </template>
     </el-dialog>
@@ -159,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, reactive } from 'vue';
 import { Delete, Plus, Search, Download } from '@element-plus/icons-vue';
 import { dictionaryApi } from '../api';
 import type { StandardField, WordRoot } from '../types';
@@ -179,8 +187,10 @@ const similarDialogVisible = ref(false);
 const similarRoots = ref<any[]>([]);
 const searchingWord = ref('');
 
-const missingWords = ref<string[]>([]);
-const matchedIds = ref<number[]>([]);
+// --- 交互选择核心状态 ---
+const analysisSegments = ref<any[]>([]); // 存储分段和候选
+const selectedRootIds = reactive<Record<number, number>>({}); // 索引 -> 已选词根ID
+const selectedRoots = reactive<Record<number, any>>({});    // 索引 -> 词根对象详情
 
 const selectedField = ref<StandardField | null>(null);
 const detailRoots = ref<WordRoot[]>([]);
@@ -206,42 +216,66 @@ const fetchFields = async () => {
   try {
     const { data } = await dictionaryApi.getFields();
     fields.value = data;
-    logger.debug("Field:Data", "字段列表同步完成", { count: data.length });
-  } catch (e) {
-    // 接口拦截器已记录网络日志
   } finally {
     loading.value = false;
   }
 };
 
-// 2. 解析建议
+// 2. 交互式解析逻辑
 let timer: any = null;
 const handleAnalyze = () => {
   if (timer) clearTimeout(timer);
   timer = setTimeout(async () => {
-    if (!form.value.field_cn_name) {
-      form.value.field_en_name = '';
-      missingWords.value = [];
-      matchedIds.value = [];
+    const input = form.value.field_cn_name?.trim();
+    if (!input) {
+      analysisSegments.value = [];
       return;
     }
-    logger.info("Field:Service", "启动词根切分异步分析", { input: form.value.field_cn_name });
+    logger.info("Field:Service", "启动词根切分异步分析", { input });
     try {
-      const { data } = await dictionaryApi.getSuggest(form.value.field_cn_name);
-      form.value.field_en_name = data.suggested_en;
-      missingWords.value = data.missing_words;
-      matchedIds.value = data.matched_ids || [];
+      const { data } = await dictionaryApi.getSuggest(input);
+      analysisSegments.value = data.segments;
       
-      if (data.missing_words.length > 0) {
-        logger.warn("Field:Service", "分析完成：存在未标准化词汇", data.missing_words);
-      } else {
-        logger.info("Field:Service", "分析完成：全词根匹配成功", data.suggested_en);
-      }
-    } catch (e) { 
-      // 错误已由拦截器捕获
-    }
+      // 重置选择
+      Object.keys(selectedRootIds).forEach(key => delete selectedRootIds[Number(key)]);
+      Object.keys(selectedRoots).forEach(key => delete selectedRoots[Number(key)]);
+
+      // 智能预选：如果段落只有一个候选词根，自动选中
+      data.segments.forEach((seg: any, index: number) => {
+        if (seg.candidates.length === 1) {
+          selectRoot(index, seg.candidates[0]);
+        }
+      });
+      logger.debug("Field:Data", "切分分析结果已更新", data.segments);
+    } catch (e) { /* 处理已由拦截器记录 */ }
   }, 400);
 };
+
+// 选择操作
+const selectRoot = (index: number, root: any) => {
+  selectedRootIds[index] = root.id;
+  selectedRoots[index] = root;
+  syncToForm();
+};
+
+// 同步回 Form 原始数据
+const syncToForm = () => {
+  form.value.field_en_name = previewParts.value.join('_');
+  form.value.composition_ids = analysisSegments.value
+    .map((_, i) => selectedRootIds[i])
+    .filter(id => !!id);
+};
+
+// 计算预览各部分
+const previewParts = computed(() => {
+  return analysisSegments.value.map((_, i) => selectedRoots[i]?.en_abbr || '??');
+});
+
+// 是否完成所有分段的选择
+const isSelectionComplete = computed(() => {
+  if (analysisSegments.value.length === 0) return false;
+  return analysisSegments.value.every((_, i) => !!selectedRootIds[i]);
+});
 
 // 3. 语义搜索词根
 const searchSimilar = async (word: string) => {
@@ -251,7 +285,6 @@ const searchSimilar = async (word: string) => {
     const { data } = await dictionaryApi.getSimilarRoots(word);
     similarRoots.value = data;
     similarDialogVisible.value = true;
-    logger.debug("Field:Service", "语义召回数据完毕", data);
   } catch (e) {
     ElMessage.error("检索失败");
   }
@@ -259,7 +292,7 @@ const searchSimilar = async (word: string) => {
 
 // 4. Excel 导出逻辑
 const handleExport = () => {
-  logger.info("Field:Action", "触发导出 Excel 备份任务", { visibleCount: filteredFields.value.length });
+  logger.info("Field:Action", "触发导出 Excel 备份任务");
   try {
     const exportData = filteredFields.value.map((f, index) => ({
       "序号": index + 1,
@@ -269,18 +302,13 @@ const handleExport = () => {
       "关联同义词": f.associated_terms || '-',
       "发布时间": f.created_at ? new Date(f.created_at).toLocaleString() : '-'
     }));
-
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "数据标准清单");
-
-    const timeMark = new Date().getTime();
-    XLSX.writeFile(wb, `标准字段导出_${timeMark}.xlsx`);
-    logger.info("Field:Action", "Excel 文件生成成功并下发下载指令");
+    XLSX.writeFile(wb, `标准字段导出_${new Date().getTime()}.xlsx`);
     ElMessage.success("导出成功");
   } catch (err) {
-    logger.error("Field:Action", "导出组件运行时异常", err);
-    ElMessage.error("导出异常，请查看控制台");
+    logger.error("Field:Action", "导出组件异常", err);
   }
 };
 
@@ -290,20 +318,17 @@ const submitForm = async () => {
   await formRef.value.validate(async (valid: boolean) => {
     if (valid) {
       const isEdit = !!form.value.id;
-      logger.info("Field:Action", isEdit ? "提交字段更新请求" : "提交新增字段请求", form.value);
+      logger.info("Field:Action", isEdit ? "提交字段更新" : "提交新增字段", form.value);
       submitting.value = true;
       try {
-        const payload = { ...form.value, composition_ids: matchedIds.value };
         if (isEdit) {
-          await dictionaryApi.updateField(form.value.id, payload);
+          await dictionaryApi.updateField(form.value.id, form.value);
         } else {
-          await dictionaryApi.createField(payload);
+          await dictionaryApi.createField(form.value);
         }
         ElMessage.success('保存成功');
         dialogVisible.value = false;
         fetchFields();
-      } catch (e) {
-        // 错误已由拦截器记录
       } finally { submitting.value = false; }
     }
   });
@@ -311,45 +336,38 @@ const submitForm = async () => {
 
 // 6. 删除
 const handleDelete = async (id: number) => {
-  logger.warn("Field:Action", `执行物理删除指令，目标ID: ${id}`);
+  logger.warn("Field:Action", `执行物理删除指令 ID: ${id}`);
   try {
     await dictionaryApi.deleteField(id);
     ElMessage.success('已删除');
     fetchFields();
-  } catch (e) {
-    // 错误已处理
-  }
+  } catch (e) { }
 };
 
 // 7. 详情
 const showDetail = async (row: StandardField) => {
-  logger.debug("Field:UI", "打开字段引用链抽屉", { fieldId: row.id });
+  logger.debug("Field:UI", "打开详情抽屉", { id: row.id });
   selectedField.value = row;
   detailRoots.value = [];
   drawerVisible.value = true;
   try {
     const { data } = await dictionaryApi.getFieldDetails(row.id!);
     detailRoots.value = data;
-    logger.info("Field:Service", "字段组成链路解析成功", { count: data.length });
   } catch (e) {
     ElMessage.error("详情加载失败");
   }
 };
 
 const handleSearchLog = () => {
-  if (searchQuery.value) {
-    logger.debug("Field:UI", "执行列表本地过滤搜索", { query: searchQuery.value });
-  }
+  if (searchQuery.value) logger.debug("Field:UI", "执行本地搜索", { query: searchQuery.value });
 };
 
 const openAddDialog = () => { 
-  logger.debug("Field:UI", "打开新增字段对话框");
   resetForm(); 
   dialogVisible.value = true; 
 };
 
 const handleEdit = (row: StandardField) => {
-  logger.debug("Field:UI", "进入字段编辑模式", { id: row.id });
   form.value = { ...row };
   handleAnalyze();
   dialogVisible.value = true;
@@ -357,8 +375,9 @@ const handleEdit = (row: StandardField) => {
 
 const resetForm = () => {
   form.value = { id: undefined, field_cn_name: '', field_en_name: '', associated_terms: '', data_type: 'VARCHAR(100)', composition_ids: [] };
-  missingWords.value = [];
-  matchedIds.value = [];
+  analysisSegments.value = [];
+  Object.keys(selectedRootIds).forEach(key => delete selectedRootIds[Number(key)]);
+  Object.keys(selectedRoots).forEach(key => delete selectedRoots[Number(key)]);
 };
 
 const filteredFields = computed(() => {
@@ -371,26 +390,18 @@ const filteredFields = computed(() => {
 });
 
 const handleClearAll = () => {
-  ElMessageBox.confirm(
-    '警告：此操作将永久清空标准库和向量索引，用户将无法搜索到任何字段！',
-    '高危操作确认',
-    { confirmButtonText: '确定清空', cancelButtonText: '取消', type: 'error' }
-  ).then(async () => {
-    logger.warn("Field:Action", "正在执行一键全量清空（TRUNCATE/Filter:ALL）");
-    const loadingInstance = ElLoading.service({ text: '正在清理索引与数据库...' });
+  ElMessageBox.confirm('警告：此操作将永久清空标准库和向量索引！', '高危操作', { 
+    confirmButtonText: '确定清空', cancelButtonText: '取消', type: 'error' 
+  }).then(async () => {
+    const loadingInstance = ElLoading.service({ text: '清理中...' });
     try {
       const res = await dictionaryApi.clearAllFields();
-      logger.info("Field:Action", "标准字段库全量清理任务已完成", res.data);
       ElMessage.success(res.data);
       await fetchFields();
-    } catch (e) {
-      // 错误处理
     } finally {
       loadingInstance.close();
     }
-  }).catch(() => {
-    logger.debug("Field:UI", "用户取消了清空操作");
-  });
+  }).catch(() => {});
 };
 
 onMounted(fetchFields);
@@ -398,50 +409,30 @@ onMounted(fetchFields);
 
 <style scoped>
 .en-code {
-  background: #f0f7ff;
-  color: #409eff;
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-family: 'Consolas', monospace;
-  font-weight: bold;
+  background: #f0f7ff; color: #409eff; padding: 3px 8px; border-radius: 4px; font-family: 'Consolas', monospace; font-weight: bold;
 }
-
 .analysis-box {
-  background: #f8f9fa;
-  padding: 15px;
-  border-radius: 8px;
-  margin-bottom: 20px;
-  border: 1px dashed #dcdfe6;
+  background: #f8f9fa; padding: 18px; border-radius: 8px; margin: 0 0 20px 0; border: 1px dashed #dcdfe6;
 }
-
-.box-title {
-  font-size: 12px;
-  color: #909399;
-  margin-bottom: 10px;
+.box-title { font-size: 13px; color: #606266; margin-bottom: 15px; font-weight: bold; }
+.segment-chain { display: flex; flex-wrap: wrap; gap: 15px; }
+.segment-item {
+  background: #fff; border: 1px solid #e4e7ed; border-radius: 6px; padding: 10px; min-width: 140px; display: flex; flex-direction: column;
 }
-
-.missing-actions {
-  margin-top: 8px;
+.segment-item.is-missing { border-color: #f56c6c; background: #fffbfa; }
+.original-word { font-size: 12px; color: #909399; margin-bottom: 8px; text-align: center; border-bottom: 1px solid #f2f6fc; padding-bottom: 4px; }
+.candidate-list { display: flex; flex-direction: column; gap: 5px; }
+.root-tag { width: 100%; text-align: left; cursor: pointer; height: auto; padding: 4px 8px; }
+.cand-cn { font-size: 11px; opacity: 0.7; margin-left: 4px; }
+.missing-status { text-align: center; padding: 5px 0; }
+.en-preview-bar {
+  margin-top: 20px; padding: 12px; background: #f0f9eb; border-radius: 4px; display: flex; align-items: center; border: 1px solid #e1f3d8;
 }
-
-.search-btns {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.field-container {
-  padding: 10px;
-}
-
-.right .el-button {
-  margin-left: 10px;
-}
+.preview-label { font-size: 13px; color: #67c23a; margin-right: 10px; }
+.preview-value { font-family: 'Consolas', monospace; font-size: 16px; color: #303133; }
+.text-danger { color: #f56c6c; }
+.status-empty { color: #c0c4cc; text-align: center; font-size: 13px; }
+.toolbar { display: flex; justify-content: space-between; margin-bottom: 20px; }
+.field-container { padding: 10px; }
+.right .el-button { margin-left: 10px; }
 </style>

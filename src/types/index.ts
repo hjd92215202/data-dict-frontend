@@ -19,10 +19,13 @@ export interface WordRoot {
   score?: number;
 }
 
+export interface Segment {
+  word: string;
+  candidates: WordRoot[];
+}
+
 export interface SuggestResponse {
-  suggested_en: string;
-  missing_words: string[];
-  matched_ids: number[];
+  segments: Segment[];
 }
 
 export interface StandardField {

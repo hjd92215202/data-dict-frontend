@@ -74,7 +74,8 @@ export const dictionaryApi = {
     request.get<SuggestResponse>(`/admin/suggest?q=${encodeURIComponent(q)}`),
 
   // 标准字段管理
-  getFields: () => request.get<StandardField[]>('/admin/fields'),
+  getFields: (page: number, pageSize: number, q?: string) =>
+    request.get<PaginatedResponse<StandardField>>(`/admin/fields?page=${page}&page_size=${pageSize}&q=${encodeURIComponent(q || '')}`),
   createField: (data: any) => request.post('/admin/fields', data),
   updateField: (id: number, data: any) => request.put(`/admin/fields/${id}`, data),
   deleteField: (id: number) => request.delete(`/admin/fields/${id}`),

@@ -1,0 +1,459 @@
+openapi: 3.0.3
+info:
+  title: Data Dictionary API (Frontend surface)
+  version: 1.0.0
+  description: OpenAPI spec generated from `src/api/index.ts` for frontend-used endpoints.
+servers:
+  - url: /api
+paths:
+  /auth/login:
+    post:
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthPayload'
+      responses:
+        '200':
+          description: Auth response with token and role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+
+  /auth/signup:
+    post:
+      summary: Signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthPayload'
+      responses:
+        '200':
+          description: Signup result
+
+  /public/search:
+    get:
+      summary: Public search for standard fields
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: search query
+      responses:
+        '200':
+          description: Paginated StandardField list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStandardField'
+
+  /public/similar-roots:
+    get:
+      summary: Find similar word roots for a word
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        '200':
+          description: array of WordRoot with score
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WordRoot'
+
+  /admin/roots:
+    get:
+      summary: List roots (paginated)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWordRoot'
+    post:
+      summary: Create a root
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WordRoot'
+      responses:
+        '201':
+          description: created
+
+  /admin/roots/batch:
+    post:
+      summary: Batch create roots
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/WordRoot'
+      responses:
+        '200':
+          description: batch result
+
+  /admin/roots/clear:
+    delete:
+      summary: Clear all roots (dangerous)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: cleared
+
+  /admin/suggest:
+    get:
+      summary: Suggest word roots for segmented input
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestResponse'
+
+  /admin/fields:
+    get:
+      summary: List fields (paginated)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: page_size
+          schema:
+            type: integer
+        - in: query
+          name: q
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedStandardField'
+    post:
+      summary: Create a field
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StandardField'
+      responses:
+        '201':
+          description: created
+    delete:
+      summary: Clear all fields (dangerous)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: cleared
+
+  /admin/fields/{id}:
+    get:
+      summary: Get field composition details
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WordRoot'
+    put:
+      summary: Update field
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StandardField'
+      responses:
+        '200':
+          description: updated
+    delete:
+      summary: Delete field
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: deleted
+
+  /admin/users:
+    get:
+      summary: List users
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: user list
+    post:
+      summary: Create user (admin)
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: created
+
+  /admin/users/{id}:
+    put:
+      summary: Update user role
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+      responses:
+        '200':
+          description: updated
+    delete:
+      summary: Delete user
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: deleted
+
+  /admin/tasks:
+    get:
+      summary: List tasks
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: task list
+
+  /admin/tasks/{id}:
+    put:
+      summary: Complete task
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: marked complete
+
+  /admin/tasks/count:
+    get:
+      summary: Get unprocessed task count
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskCount'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    AuthPayload:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        role:
+          type: string
+    WordRoot:
+      type: object
+      properties:
+        id:
+          type: integer
+        cn_name:
+          type: string
+        en_abbr:
+          type: string
+        en_full_name:
+          type: string
+        associated_terms:
+          type: string
+        remark:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        score:
+          type: number
+          format: float
+    Segment:
+      type: object
+      properties:
+        word:
+          type: string
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/WordRoot'
+    SuggestResponse:
+      type: object
+      properties:
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Segment'
+    StandardField:
+      type: object
+      properties:
+        id:
+          type: integer
+        field_cn_name:
+          type: string
+        field_en_name:
+          type: string
+        composition_ids:
+          type: array
+          items:
+            type: integer
+        data_type:
+          type: string
+        associated_terms:
+          type: string
+        is_standard:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        score:
+          type: number
+          format: float
+    PaginatedResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+        total:
+          type: integer
+    PaginatedWordRoot:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/WordRoot'
+    PaginatedStandardField:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/StandardField'
+    TaskCount:
+      type: object
+      properties:
+        count:
+          type: integer
